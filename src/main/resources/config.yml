@@ -1,0 +1,25 @@
+# Port the mini HTTP API listens on. Make sure this port is open/forwarded
+# on your host, and NOT the same as your Minecraft server port.
+port: 8123
+
+# Optional. If set, requests must include header:  X-Api-Key: <this value>
+# Leave blank to allow open access (fine if the port is only reachable
+# through a reverse proxy you control).
+api-key: ""
+
+# How often (in minutes) stats are flushed to disk automatically.
+# They are also always saved on server shutdown.
+autosave-interval-minutes: 5
+
+elo:
+  # Every new player starts here. Kept below the Combat Novice threshold (800)
+  # so new players begin at the Rookie rank instead of jumping straight to
+  # Combat Cadet.
+  starting: 0
+  # K-factor: how many rating points can move per kill. Higher = faster,
+  # more volatile swings. Lower = slower, steadier ranking.
+  k: 24
+  # Anti-farm safeguard: killing the *same* opponent again (in either
+  # direction) within this many seconds won't move Elo a second time,
+  # so two players can't trade kills back and forth to inflate rating.
+  same-pair-cooldown-seconds: 300
