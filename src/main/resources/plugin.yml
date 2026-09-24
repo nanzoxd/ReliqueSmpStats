@@ -3,4 +3,4 @@ version: ${project.version}
 main: com.relique.onlineapi.OnlineApiPlugin
 api-version: 1.13
 author: Relique
-description: Exposes online players, kills, deaths, K/D, playtime and a competitive Elo rating as JSON for the website.
+description: Exposes online players, kills, deaths, K/D, blocks mined, playtime and a competitive Elo rating (kills + playtime rewards) as JSON for the website.

@@ -22,10 +22,10 @@ status ping).
 
 ### `GET /api/stats`
 Every player the plugin has ever seen (online or not), with everything a
-leaderboard needs: **Elo, kills, deaths, K/D, playtime**.
+leaderboard needs: **Elo, kills, deaths, K/D, playtime, blocks mined**.
 
 Query params (all optional):
-- `sort` — `elo` (default), `kills`, `deaths`, `kd`, `playtime`
+- `sort` — `elo` (default), `kills`, `deaths`, `kd`, `playtime`, `blocks`
 - `order` — `desc` (default) or `asc`
 - `limit` — top N results only
 
@@ -33,6 +33,7 @@ Examples:
 ```
 GET /api/stats                          -> everyone, ranked by Elo
 GET /api/stats?sort=kills&limit=10      -> top 10 by kills
+GET /api/stats?sort=blocks&limit=10     -> top 10 by blocks mined
 GET /api/stats?sort=kd&order=asc        -> worst K/D first
 ```
 
@@ -42,11 +43,12 @@ GET /api/stats?sort=kd&order=asc        -> worst K/D first
     {
       "name": "Steve",
       "uuid": "069a79f4-44e9-4726-a5be-fca90e38aaf5",
-      "elo": 1214,
+      "elo": 1614,
       "rank": "Combat Specialist",
       "kills": 37,
       "deaths": 19,
       "kd": 1.95,
+      "blocks_mined": 5820,
       "playtime_seconds": 145200
     }
   ]
@@ -58,37 +60,53 @@ Both endpoints send `Access-Control-Allow-Origin: *` so your website can
 
 ## How the Elo system works
 
-- Every player starts at **1000**.
+- Every player starts at Elo **700** — the base of the ladder (Rookie). Elo
+  can never drop below 700 either.
 - Only **PvP kills** move Elo — deaths to fall damage, lava, mobs, etc. still
   count toward your death total and K/D, but never touch rating.
 - Standard competitive Elo math: your expected chance to win a given matchup
   is calculated from the rating gap, then rating moves toward the actual
-  result by a fixed **K-factor** (default 24, no placement period).
+  result by a fixed **K-factor** (default 24).
 - **Anti-farming safeguard**: if the same two players trade a kill again
   within 5 minutes (in either direction), it still counts toward
   kills/deaths, but Elo won't move a second time — so two players can't
   camp each other for easy rating.
+- **Every kill tells both players exactly what happened** — the killer sees
+  their Elo gain and new rank in chat, the victim sees their loss and new
+  rank. If the kill was on cooldown (anti-farm), the killer is told the kill
+  counted but Elo didn't move.
+- **Playtime also earns Elo** — 5 points (configurable) for every full hour
+  a player is online, paid out automatically and announced in chat
+  (`elo.playtime-reward-per-hour` in `config.yml`, set to `0` to turn it
+  off). This is separate from PvP — playtime Elo alone will never earn
+  someone Combat Grandmaster, since that still requires an actual PvP
+  record (see below).
 
-All of this is tunable in `config.yml` (starting Elo, K-factor, farm-cooldown
-window).
+All of this is tunable in `config.yml` (starting/floor Elo, K-factor,
+farm-cooldown window, Grandmaster slot count, playtime reward rate).
 
 ## Rank tiers
 
-Each player's Elo maps to a rank, included as `"rank"` in `/api/stats`:
+Each player's Elo maps to a rank, included as `"rank"` in `/api/stats`.
+**Combat Grandmaster is not a fixed Elo number** — it's reserved for only the
+top 2 players server-wide (configurable via `elo.grandmaster-slots`), and
+only among players already above the Combat Master threshold. Everyone else
+caps out at Combat Master no matter how high their Elo climbs, until one of
+those 2 seats opens up (someone gets overtaken).
 
 | Rank | Elo range |
 |---|---|
-| Rookie | 0 – 799 |
-| Combat Novice | 800 – 949 |
-| Combat Cadet | 950 – 1099 |
-| Combat Specialist | 1100 – 1249 |
-| Combat Ace | 1250 – 1399 |
-| Combat Master | 1400 – 1599 |
-| Combat Grandmaster | 1600+ |
+| Rookie | 700 – 949 |
+| Combat Novice | 950 – 1199 |
+| Combat Cadet | 1200 – 1449 |
+| Combat Specialist | 1450 – 1699 |
+| Combat Ace | 1700 – 1949 |
+| Combat Master | 1950+ |
+| Combat Grandmaster | top 2 players only, among those 1950+ |
 
-New players start at 1000 Elo, so everyone begins as a **Combat Cadet**.
-The thresholds are set in `StatsManager.java` (the `TIERS` array) if you
-ever want to adjust them — send me new numbers any time and I'll update it.
+New players start at 700 Elo, so everyone begins as a **Rookie**. The
+thresholds and Grandmaster slot count live in `config.yml` / the `TIERS`
+array in `StatsManager.java` — send me new numbers any time and I'll adjust.
 
 ## Storage
 

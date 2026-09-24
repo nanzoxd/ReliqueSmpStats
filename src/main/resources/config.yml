@@ -12,10 +12,9 @@ api-key: ""
 autosave-interval-minutes: 5
 
 elo:
-  # Every new player starts here. Kept below the Combat Novice threshold (800)
-  # so new players begin at the Rookie rank instead of jumping straight to
-  # Combat Cadet.
-  starting: 0
+  # Every new player starts here — the base of the ladder (Rookie).
+  # Elo can never drop below this number either.
+  starting: 700
   # K-factor: how many rating points can move per kill. Higher = faster,
   # more volatile swings. Lower = slower, steadier ranking.
   k: 24
@@ -23,3 +22,10 @@ elo:
   # direction) within this many seconds won't move Elo a second time,
   # so two players can't trade kills back and forth to inflate rating.
   same-pair-cooldown-seconds: 300
+  # "Combat Grandmaster" isn't a fixed Elo number — it's reserved for only
+  # this many of the very top players (by Elo, among those above the
+  # Combat Master threshold). Everyone else caps out at Combat Master.
+  grandmaster-slots: 2
+  # Playtime also earns Elo — this many points per full hour played,
+  # paid out automatically as hours complete. Set to 0 to disable.
+  playtime-reward-per-hour: 5

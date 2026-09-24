@@ -29,7 +29,7 @@
            compile errors, e.g. 1.20.4-R0.1-SNAPSHOT, 1.19.4-R0.1-SNAPSHOT, etc.
            A newer API version still compiles fine against an older server
            for this simple plugin, since it only uses very basic Bukkit calls. -->
-      <version>1.20.4-R0.1-SNAPSHOT</version>
+      <version>1.21.11-R0.1-SNAPSHOT</version>
       <scope>provided</scope>
     </dependency>
   </dependencies>

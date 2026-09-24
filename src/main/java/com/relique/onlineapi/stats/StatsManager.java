@@ -1,45 +1,57 @@
 package com.relique.onlineapi.stats;
 
+import org.bukkit.Bukkit;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.logging.Level;
 
 /**
- * Tracks per-player Elo, kills, deaths and playtime, and persists them to
- * stats.yml so they survive restarts.
+ * Tracks per-player Elo, kills, deaths, playtime and blocks mined, and
+ * persists them to stats.yml so they survive restarts.
  */
 public class StatsManager {
 
-    /** Elo rank tiers, lowest threshold first. Elo >= a tier's threshold (and below the next one) gets that rank. */
+    /**
+     * Static Elo tiers, lowest first. These cover everyone up through
+     * "Combat Master". "Combat Grandmaster" is NOT on this list — it's not
+     * a fixed Elo threshold, it's reserved for only the top players (see
+     * grandmasterSlots), so it can't be reached just by grinding Elo up.
+     */
     private static final Object[][] TIERS = {
-            {0.0,    "Rookie"},
-            {800.0,  "Combat Novice"},
-            {950.0,  "Combat Cadet"},
-            {1100.0, "Combat Specialist"},
-            {1250.0, "Combat Ace"},
-            {1400.0, "Combat Master"},
-            {1600.0, "Combat Grandmaster"},
+            {700.0,  "Rookie"},
+            {950.0,  "Combat Novice"},
+            {1200.0, "Combat Cadet"},
+            {1450.0, "Combat Specialist"},
+            {1700.0, "Combat Ace"},
+            {1950.0, "Combat Master"},
     };
+    private static final double MASTER_THRESHOLD = 1950.0;
+    private static final String GRANDMASTER = "Combat Grandmaster";
 
-    public static String rankFor(double elo) {
-        String rank = (String) TIERS[0][1];
-        for (Object[] tier : TIERS) {
-            double threshold = (double) tier[0];
+    /** Elo tier by number alone, ignoring the Grandmaster leaderboard slots. */
+    public static String tierForElo(double elo) {
+        String tier = (String) TIERS[0][1];
+        for (Object[] t : TIERS) {
+            double threshold = (double) t[0];
             if (elo >= threshold) {
-                rank = (String) tier[1];
+                tier = (String) t[1];
             } else {
                 break;
             }
         }
-        return rank;
+        return tier;
     }
 
     public static class PlayerStats {
@@ -48,16 +60,24 @@ public class StatsManager {
         public double elo;
         public int kills;
         public int deaths;
+        public int blocksMined;
+        public int pvpMatches;          // Elo-eligible kills/deaths this player has been part of
         public long playtimeSeconds;
-        public long sessionStart;     // epoch millis this session began, 0 if offline
+        public long playtimeHoursPaid;  // whole hours of playtime already converted to Elo
+        public long sessionStart;       // epoch millis this session began, 0 if offline
 
         public double kd() {
             return deaths == 0 ? kills : (double) kills / deaths;
         }
+    }
 
-        public String rank() {
-            return rankFor(elo);
-        }
+    public static class KillResult {
+        public boolean applied;
+        public double killerEloBefore, killerEloAfter;
+        public double victimEloBefore, victimEloAfter;
+        public String killerRankAfter, victimRankAfter;
+        public int kGain() { return (int) Math.round(killerEloAfter - killerEloBefore); }
+        public int vChange() { return (int) Math.round(victimEloAfter - victimEloBefore); }
     }
 
     private final JavaPlugin plugin;
@@ -71,13 +91,18 @@ public class StatsManager {
     private final double startingElo;
     private final double k;
     private final long pairCooldownMillis;
+    private final int grandmasterSlots;
+    private final double playtimeEloPerHour;
 
     public StatsManager(JavaPlugin plugin) {
         this.plugin = plugin;
         this.file = new File(plugin.getDataFolder(), "stats.yml");
-        this.startingElo = plugin.getConfig().getDouble("elo.starting", 0);
+        // New players start at the base of the ladder.
+        this.startingElo = plugin.getConfig().getDouble("elo.starting", 700);
         this.k = plugin.getConfig().getDouble("elo.k", 24);
         this.pairCooldownMillis = plugin.getConfig().getLong("elo.same-pair-cooldown-seconds", 300) * 1000L;
+        this.grandmasterSlots = plugin.getConfig().getInt("elo.grandmaster-slots", 2);
+        this.playtimeEloPerHour = plugin.getConfig().getDouble("elo.playtime-reward-per-hour", 5);
         load();
     }
 
@@ -104,6 +129,7 @@ public class StatsManager {
         if (s == null || s.sessionStart == 0) return;
         s.playtimeSeconds += (System.currentTimeMillis() - s.sessionStart) / 1000L;
         s.sessionStart = 0;
+        payPlaytimeElo(s, null); // player is leaving, no point messaging them
     }
 
     /** Rolls currently-open sessions into playtimeSeconds without ending them. Call this on autosave. */
@@ -113,22 +139,51 @@ public class StatsManager {
             if (s.sessionStart != 0) {
                 s.playtimeSeconds += (now - s.sessionStart) / 1000L;
                 s.sessionStart = now;
+                payPlaytimeElo(s, Bukkit.getPlayer(s.uuid));
             }
         }
     }
 
+    /**
+     * Converts newly-completed whole hours of playtime into Elo. A player who has
+     * banked, say, 3 new whole hours since the last payout gets 3x the per-hour
+     * reward in one go. Safe to call often — it only ever pays for hours not yet paid.
+     */
+    private void payPlaytimeElo(PlayerStats s, Player online) {
+        if (playtimeEloPerHour <= 0) return;
+        long wholeHoursNow = s.playtimeSeconds / 3600;
+        if (wholeHoursNow <= s.playtimeHoursPaid) return;
+        long newHours = wholeHoursNow - s.playtimeHoursPaid;
+        double gain = newHours * playtimeEloPerHour;
+        s.elo += gain;
+        s.playtimeHoursPaid = wholeHoursNow;
+        if (online != null) {
+            online.sendMessage("§b+" + Math.round(gain) + " Elo §7for " + newHours
+                    + (newHours == 1 ? " hour" : " hours") + " played §7(now §f"
+                    + Math.round(s.elo) + " Elo §7— §e" + rankOf(s) + "§7)");
+        }
+    }
+
     public synchronized void recordEnvironmentalDeath(UUID victim, String victimName) {
-        // Counts toward deaths/K-D, but never touches Elo — Elo is PvP-only.
+        // Counts toward deaths/K-D, but never touches Elo — Elo is PvP-only (plus playtime rewards).
         get(victim, victimName).deaths++;
     }
 
+    public synchronized void recordBlockMined(UUID uuid, String name) {
+        get(uuid, name).blocksMined++;
+    }
+
     /** Records a PvP kill and applies a competitive Elo update between the two players. */
-    public synchronized void recordKill(UUID killerUuid, String killerName, UUID victimUuid, String victimName) {
+    public synchronized KillResult recordKill(UUID killerUuid, String killerName, UUID victimUuid, String victimName) {
         PlayerStats killer = get(killerUuid, killerName);
         PlayerStats victim = get(victimUuid, victimName);
 
         killer.kills++;
         victim.deaths++;
+
+        KillResult result = new KillResult();
+        result.killerEloBefore = killer.elo;
+        result.victimEloBefore = victim.elo;
 
         String pairKey = killerUuid.compareTo(victimUuid) < 0
                 ? killerUuid + ":" + victimUuid
@@ -145,8 +200,46 @@ public class StatsManager {
 
             killer.elo += k * (1.0 - expectedKiller);
             victim.elo += k * (0.0 - expectedVictim);
-            if (victim.elo < 0) victim.elo = 0;
+            // Elo can never drop below the base floor — 700 is rock bottom, not a punishment pit.
+            if (victim.elo < startingElo) victim.elo = startingElo;
+
+            killer.pvpMatches++;
+            victim.pvpMatches++;
         }
+
+        result.applied = eloEligible;
+        result.killerEloAfter = killer.elo;
+        result.victimEloAfter = victim.elo;
+        result.killerRankAfter = rankOf(killer);
+        result.victimRankAfter = rankOf(victim);
+        return result;
+    }
+
+    /**
+     * The players currently holding "Combat Grandmaster" — the top
+     * `grandmaster-slots` (default 2) players who are also above the
+     * Combat Master Elo threshold. Everyone else, no matter how high their
+     * Elo, is capped at "Combat Master" until one of these seats opens up.
+     */
+    public synchronized List<PlayerStats> currentGrandmasters() {
+        List<PlayerStats> eligible = new ArrayList<>();
+        for (PlayerStats s : stats.values()) {
+            if (s.pvpMatches > 0 && s.elo >= MASTER_THRESHOLD) eligible.add(s);
+        }
+        eligible.sort(Comparator.comparingDouble((PlayerStats s) -> s.elo).reversed());
+        if (eligible.size() > grandmasterSlots) {
+            return eligible.subList(0, grandmasterSlots);
+        }
+        return eligible;
+    }
+
+    /** Full rank for one player, accounting for the Grandmaster leaderboard slots. */
+    public synchronized String rankOf(PlayerStats s) {
+        String base = tierForElo(s.elo);
+        if (base.equals("Combat Master") && currentGrandmasters().contains(s)) {
+            return GRANDMASTER;
+        }
+        return base;
     }
 
     public synchronized Collection<PlayerStats> all() {
@@ -166,7 +259,10 @@ public class StatsManager {
                 s.elo = yml.getDouble("players." + key + ".elo", startingElo);
                 s.kills = yml.getInt("players." + key + ".kills", 0);
                 s.deaths = yml.getInt("players." + key + ".deaths", 0);
+                s.blocksMined = yml.getInt("players." + key + ".blocks-mined", 0);
+                s.pvpMatches = yml.getInt("players." + key + ".pvp-matches", 0);
                 s.playtimeSeconds = yml.getLong("players." + key + ".playtime-seconds", 0);
+                s.playtimeHoursPaid = yml.getLong("players." + key + ".playtime-hours-paid", 0);
                 s.sessionStart = 0;
                 stats.put(uuid, s);
             } catch (IllegalArgumentException ignored) {
@@ -183,7 +279,10 @@ public class StatsManager {
             yml.set(base + "elo", s.elo);
             yml.set(base + "kills", s.kills);
             yml.set(base + "deaths", s.deaths);
+            yml.set(base + "blocks-mined", s.blocksMined);
+            yml.set(base + "pvp-matches", s.pvpMatches);
             yml.set(base + "playtime-seconds", s.playtimeSeconds);
+            yml.set(base + "playtime-hours-paid", s.playtimeHoursPaid);
         }
         try {
             if (!plugin.getDataFolder().exists()) plugin.getDataFolder().mkdirs();

@@ -16,7 +16,7 @@ import java.util.Map;
 
 /**
  * GET /api/stats
- *   ?sort=elo|kills|deaths|kd|playtime   (default: elo)
+ *   ?sort=elo|kills|deaths|kd|playtime|blocks (default: elo)
  *   ?order=desc|asc                      (default: desc)
  *   ?limit=N                             (default: all)
  *
@@ -61,6 +61,7 @@ public class StatsHttpHandler implements HttpHandler {
             case "deaths":   cmp = Comparator.comparingInt(s -> s.deaths); break;
             case "kd":       cmp = Comparator.comparingDouble(StatsManager.PlayerStats::kd); break;
             case "playtime": cmp = Comparator.comparingLong(s -> s.playtimeSeconds); break;
+            case "blocks":   cmp = Comparator.comparingInt(s -> s.blocksMined); break;
             case "elo":
             default:         cmp = Comparator.comparingDouble(s -> s.elo); break;
         }
@@ -80,10 +81,11 @@ public class StatsHttpHandler implements HttpHandler {
                     .append("\"name\":\"").append(escape(s.name)).append("\",")
                     .append("\"uuid\":\"").append(s.uuid).append("\",")
                     .append("\"elo\":").append(Math.round(s.elo)).append(",")
-                    .append("\"rank\":\"").append(escape(s.rank())).append("\",")
+                    .append("\"rank\":\"").append(escape(stats.rankOf(s))).append("\",")
                     .append("\"kills\":").append(s.kills).append(",")
                     .append("\"deaths\":").append(s.deaths).append(",")
                     .append("\"kd\":").append(String.format("%.2f", s.kd())).append(",")
+                    .append("\"blocks_mined\":").append(s.blocksMined).append(",")
                     .append("\"playtime_seconds\":").append(currentPlaytime(s))
                     .append("}");
         }
