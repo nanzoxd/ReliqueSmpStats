@@ -12,9 +12,11 @@ api-key: ""
 autosave-interval-minutes: 5
 
 elo:
-  # Every new player starts here — the base of the ladder (Rookie).
-  # Elo can never drop below this number either.
-  starting: 700
+  # Every new player starts here (950 = Combat Novice).
+  starting: 950
+  # Elo can never drop below this number (700 = Rookie). Players start
+  # at Combat Novice and can be knocked down to Rookie, but no lower.
+  floor: 700
   # K-factor: how many rating points can move per kill. Higher = faster,
   # more volatile swings. Lower = slower, steadier ranking.
   k: 24

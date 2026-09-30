@@ -86,8 +86,18 @@ public class StatsHttpHandler implements HttpHandler {
                     .append("\"deaths\":").append(s.deaths).append(",")
                     .append("\"kd\":").append(String.format("%.2f", s.kd())).append(",")
                     .append("\"blocks_mined\":").append(s.blocksMined).append(",")
-                    .append("\"playtime_seconds\":").append(currentPlaytime(s))
-                    .append("}");
+                    .append("\"playtime_seconds\":").append(currentPlaytime(s)).append(",")
+                    .append("\"recent_fights\":[");
+            boolean firstFight = true;
+            for (StatsManager.Fight f : s.fights) {
+                if (!firstFight) json.append(",");
+                firstFight = false;
+                json.append("{\"opponent\":\"").append(escape(f.opponent)).append("\",")
+                        .append("\"result\":\"").append(f.win ? "win" : "loss").append("\",")
+                        .append("\"elo_change\":").append(f.eloChange).append(",")
+                        .append("\"time\":").append(f.time).append("}");
+            }
+            json.append("]}");
         }
         json.append("]}");
 

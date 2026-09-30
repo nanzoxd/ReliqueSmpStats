@@ -54,6 +54,32 @@ public class StatsManager {
         return tier;
     }
 
+    /** One PvP fight from a player's point of view. Newest first, capped at MAX_FIGHTS. */
+    public static class Fight {
+        public long time;        // epoch millis
+        public String opponent;
+        public boolean win;
+        public int eloChange;    // 0 when the same-pair cooldown blocked the Elo change
+    }
+
+    private static final int MAX_FIGHTS = 10;
+
+    /** One entry in the server-wide "recent events" feed (kills and deaths). */
+    public static class Event {
+        public long time;
+        public String type;        // "pvp" (killed by a player) or "env" (any other death)
+        public String victim;
+        public UUID victimUuid;
+        public String killer;      // null for env deaths
+        public UUID killerUuid;    // null for env deaths
+        public String cause;       // e.g. "smashed", "fell from a high place"
+        public int killerElo;      // Elo the killer gained (0 if none)
+        public int victimElo;      // Elo the victim lost (negative, 0 if none)
+    }
+
+    private static final int MAX_EVENTS = 100;
+    private final List<Event> events = new ArrayList<>();
+
     public static class PlayerStats {
         public UUID uuid;
         public String name;
@@ -65,6 +91,7 @@ public class StatsManager {
         public long playtimeSeconds;
         public long playtimeHoursPaid;  // whole hours of playtime already converted to Elo
         public long sessionStart;       // epoch millis this session began, 0 if offline
+        public final List<Fight> fights = new ArrayList<>();
 
         public double kd() {
             return deaths == 0 ? kills : (double) kills / deaths;
@@ -89,6 +116,7 @@ public class StatsManager {
     private final Map<String, Long> recentPairCredit = new HashMap<>();
 
     private final double startingElo;
+    private final double floorElo;
     private final double k;
     private final long pairCooldownMillis;
     private final int grandmasterSlots;
@@ -98,7 +126,8 @@ public class StatsManager {
         this.plugin = plugin;
         this.file = new File(plugin.getDataFolder(), "stats.yml");
         // New players start at the base of the ladder.
-        this.startingElo = plugin.getConfig().getDouble("elo.starting", 700);
+        this.startingElo = plugin.getConfig().getDouble("elo.starting", 950);
+        this.floorElo = plugin.getConfig().getDouble("elo.floor", 700);
         this.k = plugin.getConfig().getDouble("elo.k", 24);
         this.pairCooldownMillis = plugin.getConfig().getLong("elo.same-pair-cooldown-seconds", 300) * 1000L;
         this.grandmasterSlots = plugin.getConfig().getInt("elo.grandmaster-slots", 2);
@@ -164,9 +193,47 @@ public class StatsManager {
         }
     }
 
-    public synchronized void recordEnvironmentalDeath(UUID victim, String victimName) {
+    private void addFight(PlayerStats s, String opponent, boolean win, int eloChange) {
+        Fight f = new Fight();
+        f.time = System.currentTimeMillis();
+        f.opponent = opponent;
+        f.win = win;
+        f.eloChange = eloChange;
+        s.fights.add(0, f);
+        while (s.fights.size() > MAX_FIGHTS) s.fights.remove(s.fights.size() - 1);
+    }
+
+    private void addEvent(String type, String victim, UUID victimUuid, String killer, UUID killerUuid,
+                          String cause, int killerElo, int victimElo) {
+        Event ev = new Event();
+        ev.time = System.currentTimeMillis();
+        ev.type = type;
+        ev.victim = victim;
+        ev.victimUuid = victimUuid;
+        ev.killer = killer;
+        ev.killerUuid = killerUuid;
+        ev.cause = cause == null ? "" : cause.replace(';', ',');
+        ev.killerElo = killerElo;
+        ev.victimElo = victimElo;
+        events.add(0, ev);
+        while (events.size() > MAX_EVENTS) events.remove(events.size() - 1);
+    }
+
+    /** Newest-first copy of the recent events feed. */
+    public synchronized List<Event> recentEvents(int limit) {
+        int n = Math.min(Math.max(limit, 0), events.size());
+        return new ArrayList<>(events.subList(0, n));
+    }
+
+    public synchronized void recordEnvironmentalDeath(UUID victim, String victimName, String cause) {
         // Counts toward deaths/K-D, but never touches Elo — Elo is PvP-only (plus playtime rewards).
-        get(victim, victimName).deaths++;
+        PlayerStats v = get(victim, victimName);
+        v.deaths++;
+        addEvent("env", v.name, victim, null, null, cause, 0, 0);
+    }
+
+    public synchronized void recordEnvironmentalDeath(UUID victim, String victimName) {
+        recordEnvironmentalDeath(victim, victimName, "died");
     }
 
     public synchronized void recordBlockMined(UUID uuid, String name) {
@@ -175,6 +242,11 @@ public class StatsManager {
 
     /** Records a PvP kill and applies a competitive Elo update between the two players. */
     public synchronized KillResult recordKill(UUID killerUuid, String killerName, UUID victimUuid, String victimName) {
+        return recordKill(killerUuid, killerName, victimUuid, victimName, "killed");
+    }
+
+    public synchronized KillResult recordKill(UUID killerUuid, String killerName, UUID victimUuid, String victimName,
+                                              String cause) {
         PlayerStats killer = get(killerUuid, killerName);
         PlayerStats victim = get(victimUuid, victimName);
 
@@ -201,7 +273,7 @@ public class StatsManager {
             killer.elo += k * (1.0 - expectedKiller);
             victim.elo += k * (0.0 - expectedVictim);
             // Elo can never drop below the base floor — 700 is rock bottom, not a punishment pit.
-            if (victim.elo < startingElo) victim.elo = startingElo;
+            if (victim.elo < floorElo) victim.elo = floorElo;
 
             killer.pvpMatches++;
             victim.pvpMatches++;
@@ -212,6 +284,9 @@ public class StatsManager {
         result.victimEloAfter = victim.elo;
         result.killerRankAfter = rankOf(killer);
         result.victimRankAfter = rankOf(victim);
+        addFight(killer, victim.name, true, result.kGain());
+        addFight(victim, killer.name, false, result.vChange());
+        addEvent("pvp", victim.name, victimUuid, killer.name, killerUuid, cause, result.kGain(), result.vChange());
         return result;
     }
 
@@ -249,6 +324,23 @@ public class StatsManager {
     public synchronized void load() {
         if (!file.exists()) return;
         FileConfiguration yml = YamlConfiguration.loadConfiguration(file);
+        for (String line : yml.getStringList("events")) {
+            String[] p = line.split(";", -1); // time;type;victim;victimUuid;killer;killerUuid;cause;kElo;vElo
+            if (p.length != 9) continue;
+            try {
+                Event ev = new Event();
+                ev.time = Long.parseLong(p[0]);
+                ev.type = p[1];
+                ev.victim = p[2];
+                ev.victimUuid = p[3].isEmpty() ? null : UUID.fromString(p[3]);
+                ev.killer = p[4].isEmpty() ? null : p[4];
+                ev.killerUuid = p[5].isEmpty() ? null : UUID.fromString(p[5]);
+                ev.cause = p[6];
+                ev.killerElo = Integer.parseInt(p[7]);
+                ev.victimElo = Integer.parseInt(p[8]);
+                events.add(ev);
+            } catch (IllegalArgumentException ignored) { /* skip bad line */ }
+        }
         if (!yml.isConfigurationSection("players")) return;
         for (String key : yml.getConfigurationSection("players").getKeys(false)) {
             try {
@@ -264,6 +356,18 @@ public class StatsManager {
                 s.playtimeSeconds = yml.getLong("players." + key + ".playtime-seconds", 0);
                 s.playtimeHoursPaid = yml.getLong("players." + key + ".playtime-hours-paid", 0);
                 s.sessionStart = 0;
+                for (String line : yml.getStringList("players." + key + ".fights")) {
+                    String[] parts = line.split(";", 4); // time;win;change;opponent
+                    if (parts.length < 4) continue;
+                    try {
+                        Fight f = new Fight();
+                        f.time = Long.parseLong(parts[0]);
+                        f.win = "1".equals(parts[1]);
+                        f.eloChange = Integer.parseInt(parts[2]);
+                        f.opponent = parts[3];
+                        s.fights.add(f);
+                    } catch (NumberFormatException ignored) { /* skip bad line */ }
+                }
                 stats.put(uuid, s);
             } catch (IllegalArgumentException ignored) {
                 plugin.getLogger().log(Level.WARNING, "Skipping malformed stats entry: " + key);
@@ -283,7 +387,17 @@ public class StatsManager {
             yml.set(base + "pvp-matches", s.pvpMatches);
             yml.set(base + "playtime-seconds", s.playtimeSeconds);
             yml.set(base + "playtime-hours-paid", s.playtimeHoursPaid);
+            List<String> fl = new ArrayList<>();
+            for (Fight f : s.fights) fl.add(f.time + ";" + (f.win ? "1" : "0") + ";" + f.eloChange + ";" + f.opponent);
+            yml.set(base + "fights", fl);
         }
+        List<String> evLines = new ArrayList<>();
+        for (Event ev : events) {
+            evLines.add(ev.time + ";" + ev.type + ";" + ev.victim + ";" + (ev.victimUuid == null ? "" : ev.victimUuid)
+                    + ";" + (ev.killer == null ? "" : ev.killer) + ";" + (ev.killerUuid == null ? "" : ev.killerUuid)
+                    + ";" + ev.cause + ";" + ev.killerElo + ";" + ev.victimElo);
+        }
+        yml.set("events", evLines);
         try {
             if (!plugin.getDataFolder().exists()) plugin.getDataFolder().mkdirs();
             yml.save(file);

@@ -38,10 +38,11 @@ public class OnlineApiPlugin extends JavaPlugin {
             server = HttpServer.create(new InetSocketAddress(port), 0);
             server.createContext("/api/online", new OnlineHandler(apiKey));
             server.createContext("/api/stats", new StatsHttpHandler(statsManager, apiKey));
+            server.createContext("/api/events", new EventsHttpHandler(statsManager, apiKey));
             server.setExecutor(null); // small endpoints, default executor is plenty
             server.start();
             getLogger().info("API listening on port " + port
-                    + " (endpoints: /api/online, /api/stats)");
+                    + " (endpoints: /api/online, /api/stats, /api/events)");
         } catch (IOException e) {
             getLogger().severe("Could not start API HTTP server: " + e.getMessage());
         }
