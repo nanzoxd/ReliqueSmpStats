@@ -24,7 +24,7 @@ public class OnlineApiPlugin extends JavaPlugin {
         saveDefaultConfig();
 
         statsManager = new StatsManager(this);
-        getServer().getPluginManager().registerEvents(new StatsListener(statsManager), this);
+        getServer().getPluginManager().registerEvents(new StatsListener(statsManager, this), this);
 
         // Anyone already online when /reload happened should get a session start too.
         for (Player p : Bukkit.getOnlinePlayers()) {

@@ -14,21 +14,52 @@ import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.plugin.java.JavaPlugin;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class StatsListener implements Listener {
 
-    private final StatsManager stats;
+    private static final Pattern SKIN_URL = Pattern.compile("\"SKIN\"\\s*:\\s*\\{\\s*\"url\"\\s*:\\s*\"([^\"]+)\"");
 
-    public StatsListener(StatsManager stats) {
+    private final StatsManager stats;
+    private final JavaPlugin plugin;
+
+    public StatsListener(StatsManager stats, JavaPlugin plugin) {
         this.stats = stats;
+        this.plugin = plugin;
     }
 
     @EventHandler
     public void onJoin(PlayerJoinEvent e) {
         Player p = e.getPlayer();
         stats.onJoin(p.getUniqueId(), p.getName());
+        // SkinsRestorer sets the skin at login, but re-check a bit later in case another plugin changes it.
+        captureSkin(p);
+        Bukkit.getScheduler().runTaskLater(plugin, () -> { if (p.isOnline()) captureSkin(p); }, 40L);
+        Bukkit.getScheduler().runTaskLater(plugin, () -> { if (p.isOnline()) captureSkin(p); }, 200L);
+    }
+
+    /** Saves the skin URL the server currently shows for this player, whatever plugin set it. */
+    private void captureSkin(Player p) {
+        try {
+            com.destroystokyo.paper.profile.PlayerProfile profile = p.getPlayerProfile();
+            for (com.destroystokyo.paper.profile.ProfileProperty prop : profile.getProperties()) {
+                if (!"textures".equals(prop.getName())) continue;
+                String json = new String(Base64.getDecoder().decode(prop.getValue()), StandardCharsets.UTF_8);
+                Matcher m = SKIN_URL.matcher(json);
+                if (m.find()) {
+                    stats.setSkin(p.getUniqueId(), p.getName(), m.group(1));
+                    return;
+                }
+            }
+        } catch (Throwable ignored) {
+            // Not a Paper server, or the profile has no textures — the site falls back to name-based heads.
+        }
     }
 
     @EventHandler

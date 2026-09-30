@@ -80,6 +80,7 @@ public class StatsHttpHandler implements HttpHandler {
             json.append("{")
                     .append("\"name\":\"").append(escape(s.name)).append("\",")
                     .append("\"uuid\":\"").append(s.uuid).append("\",")
+                    .append("\"skin\":").append(s.skinUrl == null ? "null" : "\"" + escape(s.skinUrl) + "\"").append(",")
                     .append("\"elo\":").append(Math.round(s.elo)).append(",")
                     .append("\"rank\":\"").append(escape(stats.rankOf(s))).append("\",")
                     .append("\"kills\":").append(s.kills).append(",")

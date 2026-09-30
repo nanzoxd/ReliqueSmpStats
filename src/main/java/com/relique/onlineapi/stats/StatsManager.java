@@ -91,6 +91,7 @@ public class StatsManager {
         public long playtimeSeconds;
         public long playtimeHoursPaid;  // whole hours of playtime already converted to Elo
         public long sessionStart;       // epoch millis this session began, 0 if offline
+        public String skinUrl;          // skin texture URL as the server sees it (works with skin plugins), may be null
         public final List<Fight> fights = new ArrayList<>();
 
         public double kd() {
@@ -147,6 +148,11 @@ public class StatsManager {
             s.name = name; // keep the display name fresh across name changes
         }
         return s;
+    }
+
+    /** Remembers the skin texture URL the server applied to this player (e.g. via SkinsRestorer). */
+    public synchronized void setSkin(UUID uuid, String name, String url) {
+        get(uuid, name).skinUrl = url;
     }
 
     public synchronized void onJoin(UUID uuid, String name) {
@@ -356,6 +362,7 @@ public class StatsManager {
                 s.playtimeSeconds = yml.getLong("players." + key + ".playtime-seconds", 0);
                 s.playtimeHoursPaid = yml.getLong("players." + key + ".playtime-hours-paid", 0);
                 s.sessionStart = 0;
+                s.skinUrl = yml.getString("players." + key + ".skin", null);
                 for (String line : yml.getStringList("players." + key + ".fights")) {
                     String[] parts = line.split(";", 4); // time;win;change;opponent
                     if (parts.length < 4) continue;
@@ -387,6 +394,7 @@ public class StatsManager {
             yml.set(base + "pvp-matches", s.pvpMatches);
             yml.set(base + "playtime-seconds", s.playtimeSeconds);
             yml.set(base + "playtime-hours-paid", s.playtimeHoursPaid);
+            if (s.skinUrl != null) yml.set(base + "skin", s.skinUrl);
             List<String> fl = new ArrayList<>();
             for (Fight f : s.fights) fl.add(f.time + ";" + (f.win ? "1" : "0") + ";" + f.eloChange + ";" + f.opponent);
             yml.set(base + "fights", fl);
