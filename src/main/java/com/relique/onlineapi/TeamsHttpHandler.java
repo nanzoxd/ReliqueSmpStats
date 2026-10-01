@@ -76,11 +76,19 @@ public class TeamsHttpHandler implements HttpHandler {
                 return "{\"available\":false,\"teams\":[]}";
             }
 
+            // BetterTeams unloads a team from memory when none of its members is online, so
+            // getLoadedTeamListClone() alone makes fully-offline teams vanish. Collect the loaded
+            // teams first, then pull in every other team through its (offline) members.
+            java.util.Map<String, Object> all = new java.util.LinkedHashMap<>();
+            for (Object team : teamIterable) addTeam(all, team);
+            collectOfflineTeams(all, teamClass, cl);
+
+            int defaultLimit = configuredLimit(bt);
             StringBuilder json = new StringBuilder();
             json.append("{\"available\":true,\"teams\":[");
             boolean firstTeam = true;
-            for (Object team : teamIterable) {
-                String teamJson = teamToJson(team);
+            for (Object team : all.values()) {
+                String teamJson = teamToJson(team, defaultLimit);
                 if (teamJson == null) continue;
                 if (!firstTeam) json.append(",");
                 firstTeam = false;
@@ -92,6 +100,50 @@ public class TeamsHttpHandler implements HttpHandler {
             logOnce("Could not read BetterTeams: " + t);
             return "{\"available\":false,\"teams\":[]}";
         }
+    }
+
+    private void addTeam(java.util.Map<String, Object> map, Object team) {
+        if (team == null) return;
+        try {
+            String name = String.valueOf(team.getClass().getMethod("getName").invoke(team));
+            map.putIfAbsent(name.toLowerCase(java.util.Locale.ROOT), team);
+        } catch (Throwable ignored) { }
+    }
+
+    private long lastScan = 0;
+    private java.util.Map<String, Object> scanCache = new java.util.LinkedHashMap<>();
+
+    /** Finds teams that are currently unloaded by asking BetterTeams for each known player's team. */
+    private void collectOfflineTeams(java.util.Map<String, Object> out, Class<?> teamClass, ClassLoader cl) {
+        long now = System.currentTimeMillis();
+        if (now - lastScan > 30_000) {
+            java.util.Map<String, Object> found = new java.util.LinkedHashMap<>();
+            try {
+                java.lang.reflect.Method getTeam = teamClass.getMethod("getTeam", OfflinePlayer.class);
+                for (StatsManager.PlayerStats ps : stats.all()) {
+                    try {
+                        Object t = getTeam.invoke(null, Bukkit.getOfflinePlayer(ps.uuid));
+                        addTeam(found, t);
+                    } catch (Throwable ignored) { }
+                }
+            } catch (Throwable t) {
+                logOnce("Could not look up offline teams: " + t);
+            }
+            scanCache = found;
+            lastScan = now;
+        }
+        for (java.util.Map.Entry<String, Object> e : scanCache.entrySet()) out.putIfAbsent(e.getKey(), e.getValue());
+    }
+
+    /** The team size limit from BetterTeams' config.yml (0 = unknown / unlimited). */
+    private int configuredLimit(Plugin bt) {
+        try {
+            for (String key : new String[]{"maxTeamSize", "teamLimit", "max-team-size"}) {
+                int v = bt.getConfig().getInt(key, 0);
+                if (v > 0) return v;
+            }
+        } catch (Throwable ignored) { }
+        return 0;
     }
 
     private boolean logged = false;
@@ -121,16 +173,25 @@ public class TeamsHttpHandler implements HttpHandler {
     }
 
     /** Builds one team's JSON, or null if this particular team couldn't be read. */
-    private String teamToJson(Object team) {
+    private String teamToJson(Object team, int defaultLimit) {
         try {
             Class<?> teamClass = team.getClass();
             String name = String.valueOf(teamClass.getMethod("getName").invoke(team));
             String tag = safeString(teamClass, team, "getOriginalTag");
             if (tag != null && tag.isEmpty()) tag = null;
 
+            int limit = defaultLimit;
+            for (String m : new String[]{"getTeamLimit", "getMaxTeamSize", "getLimit"}) {
+                try {
+                    Object v = teamClass.getMethod(m).invoke(team);
+                    if (v instanceof Number && ((Number) v).intValue() > 0) { limit = ((Number) v).intValue(); break; }
+                } catch (Throwable ignored) { }
+            }
+
             StringBuilder json = new StringBuilder();
             json.append("{")
                     .append("\"name\":\"").append(escape(name)).append("\",")
+                    .append("\"limit\":").append(limit).append(",")
                     .append("\"tag\":").append(tag == null ? "null" : "\"" + escape(tag) + "\"").append(",")
                     .append("\"members\":[");
 
