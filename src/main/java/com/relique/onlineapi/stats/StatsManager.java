@@ -8,10 +8,13 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -91,6 +94,7 @@ public class StatsManager {
         public long playtimeSeconds;
         public long playtimeHoursPaid;  // whole hours of playtime already converted to Elo
         public long sessionStart;       // epoch millis this session began, 0 if offline
+        public long firstJoined;        // epoch millis the server first saw this player, 0 if unknown
         public String skinUrl;          // skin texture URL as the server sees it (works with skin plugins), may be null
         public final List<Fight> fights = new ArrayList<>();
 
@@ -143,11 +147,17 @@ public class StatsManager {
             s.uuid = uuid;
             s.name = name;
             s.elo = startingElo;
+            s.firstJoined = System.currentTimeMillis();
             stats.put(uuid, s);
         } else if (name != null) {
             s.name = name; // keep the display name fresh across name changes
         }
         return s;
+    }
+
+    /** Looks a player up without creating a new entry. Returns null if we've never seen them. */
+    public synchronized PlayerStats find(UUID uuid) {
+        return stats.get(uuid);
     }
 
     /** Remembers the skin texture URL the server applied to this player (e.g. via SkinsRestorer). */
@@ -323,13 +333,210 @@ public class StatsManager {
         return base;
     }
 
+    /**
+     * Wipes every player's stats and the events feed, then saves. Online players keep being tracked.
+     * A full backup is written first so /stats revert can bring everything back.
+     */
+    public synchronized boolean resetAll() {
+        if (backup("all") == null) return false; // no backup, no reset
+
+        Map<UUID, String> skins = new HashMap<>();
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            PlayerStats old = stats.get(p.getUniqueId());
+            if (old != null && old.skinUrl != null) skins.put(p.getUniqueId(), old.skinUrl);
+        }
+        stats.clear();
+        events.clear();
+        recentPairCredit.clear();
+        for (Player p : Bukkit.getOnlinePlayers()) {
+            PlayerStats s = get(p.getUniqueId(), p.getName());
+            s.sessionStart = System.currentTimeMillis();
+            s.skinUrl = skins.get(p.getUniqueId());
+        }
+        save();
+        return true;
+    }
+
+    /**
+     * Resets one player back to a fresh start. Returns false if no player has that name,
+     * or if the backup could not be written (nothing is reset in that case).
+     * A backup is written first so /stats revert can restore that player.
+     */
+    public synchronized boolean resetPlayer(String name) {
+        PlayerStats target = findByName(name);
+        if (target == null) return false;
+        if (backup("player-" + sanitize(target.name)) == null) return false;
+        target.elo = startingElo;
+        target.kills = 0;
+        target.deaths = 0;
+        target.blocksMined = 0;
+        target.pvpMatches = 0;
+        target.playtimeSeconds = 0;
+        target.playtimeHoursPaid = 0;
+        target.fights.clear();
+        if (target.sessionStart != 0) target.sessionStart = System.currentTimeMillis();
+        final String n = target.name;
+        events.removeIf(ev -> n.equalsIgnoreCase(ev.victim) || (ev.killer != null && n.equalsIgnoreCase(ev.killer)));
+        save();
+        return true;
+    }
+
+    public synchronized boolean hasPlayer(String name) {
+        return findByName(name) != null;
+    }
+
+    private PlayerStats findByName(String name) {
+        for (PlayerStats s : stats.values()) {
+            if (s.name != null && s.name.equalsIgnoreCase(name)) return s;
+        }
+        return null;
+    }
+
+    // ------------------------------------------------------------------ backups
+
+    /** One saved snapshot of stats.yml, taken automatically right before a reset (or a revert). */
+    public static class BackupInfo {
+        public File file;
+        public long time;      // epoch millis
+        public String scope;   // "all", "pre-revert", or "player-<name>"
+
+        /** Human-readable description for chat. */
+        public String describe() {
+            String when = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date(time));
+            String what;
+            if (scope.startsWith("player-")) what = "reset of " + scope.substring(7);
+            else if (scope.equals("pre-revert")) what = "state before a revert";
+            else what = "reset of ALL players";
+            return when + " - " + what;
+        }
+
+        boolean isPlayerScope() { return scope.startsWith("player-"); }
+        String playerName() { return scope.substring(7); }
+    }
+
+    private File backupDir() {
+        return new File(plugin.getDataFolder(), "backups");
+    }
+
+    private static String sanitize(String name) {
+        return name == null ? "unknown" : name.replaceAll("[^A-Za-z0-9_]", "_");
+    }
+
+    /**
+     * Saves the current stats and copies stats.yml into plugins/ReliqueOnlineAPI/backups/
+     * as "<millis>__<tag>.yml". Returns the copy, or null if it could not be written.
+     * Backups are never deleted by the plugin.
+     */
+    public synchronized File backup(String tag) {
+        flushSessions();   // include playtime from currently open sessions
+        save();
+        try {
+            File dir = backupDir();
+            if (!dir.exists() && !dir.mkdirs()) {
+                plugin.getLogger().severe("Could not create backups folder " + dir);
+                return null;
+            }
+            long now = System.currentTimeMillis();
+            File dest = new File(dir, now + "__" + tag + ".yml");
+            // Never overwrite an existing backup, even if two are taken in the same millisecond.
+            while (dest.exists()) { now++; dest = new File(dir, now + "__" + tag + ".yml"); }
+            if (file.exists()) {
+                Files.copy(file.toPath(), dest.toPath(), StandardCopyOption.COPY_ATTRIBUTES);
+            } else {
+                dest.createNewFile();
+            }
+            plugin.getLogger().info("Stats backup written: backups/" + dest.getName());
+            return dest;
+        } catch (IOException e) {
+            plugin.getLogger().log(Level.SEVERE, "Could not write stats backup", e);
+            return null;
+        }
+    }
+
+    /** All backups, newest first. */
+    public synchronized List<BackupInfo> listBackups() {
+        List<BackupInfo> out = new ArrayList<>();
+        File[] files = backupDir().listFiles((d, n) -> n.endsWith(".yml") && n.contains("__"));
+        if (files == null) return out;
+        for (File f : files) {
+            String n = f.getName();
+            String base = n.substring(0, n.length() - 4);
+            int i = base.indexOf("__");
+            try {
+                BackupInfo b = new BackupInfo();
+                b.file = f;
+                b.time = Long.parseLong(base.substring(0, i));
+                b.scope = base.substring(i + 2);
+                out.add(b);
+            } catch (NumberFormatException ignored) { /* not one of ours */ }
+        }
+        out.sort((x, y) -> Long.compare(y.time, x.time));
+        return out;
+    }
+
+    /**
+     * Restores a backup. A "reset ALL" backup (or a pre-revert one) brings back everyone;
+     * a single-player backup brings back only that player, so other players' progress made
+     * since is left alone. The current state is backed up first, so a revert can itself be undone.
+     */
+    public synchronized boolean restore(BackupInfo b) {
+        Snapshot snap = parseFile(b.file);
+        if (snap == null) return false;
+
+        if (b.isPlayerScope()) {
+            PlayerStats old = null;
+            for (PlayerStats s : snap.players.values()) {
+                if (s.name != null && s.name.equalsIgnoreCase(b.playerName())) { old = s; break; }
+            }
+            if (old == null) return false;
+            if (backup("pre-revert") == null) return false;
+            PlayerStats cur = stats.get(old.uuid);
+            if (cur != null) {
+                old.sessionStart = cur.sessionStart != 0 ? System.currentTimeMillis() : 0;
+                if (old.skinUrl == null) old.skinUrl = cur.skinUrl;
+            }
+            stats.put(old.uuid, old);
+            final String n = old.name;
+            events.removeIf(ev -> n.equalsIgnoreCase(ev.victim) || (ev.killer != null && n.equalsIgnoreCase(ev.killer)));
+            for (Event ev : snap.events) {
+                if (n.equalsIgnoreCase(ev.victim) || (ev.killer != null && n.equalsIgnoreCase(ev.killer))) events.add(ev);
+            }
+            events.sort((x, y) -> Long.compare(y.time, x.time));
+            while (events.size() > MAX_EVENTS) events.remove(events.size() - 1);
+        } else {
+            if (backup("pre-revert") == null) return false;
+            Map<UUID, String> skins = new HashMap<>();
+            for (PlayerStats s : stats.values()) if (s.skinUrl != null) skins.put(s.uuid, s.skinUrl);
+            stats.clear();
+            stats.putAll(snap.players);
+            events.clear();
+            events.addAll(snap.events);
+            recentPairCredit.clear();
+            for (PlayerStats s : stats.values()) {
+                if (s.skinUrl == null) s.skinUrl = skins.get(s.uuid);
+            }
+            for (Player p : Bukkit.getOnlinePlayers()) {
+                get(p.getUniqueId(), p.getName()).sessionStart = System.currentTimeMillis();
+            }
+        }
+        save();
+        return true;
+    }
+
     public synchronized Collection<PlayerStats> all() {
         return stats.values();
     }
 
-    public synchronized void load() {
-        if (!file.exists()) return;
-        FileConfiguration yml = YamlConfiguration.loadConfiguration(file);
+    /** Parsed contents of a stats file. */
+    private static class Snapshot {
+        final Map<UUID, PlayerStats> players = new LinkedHashMap<>();
+        final List<Event> events = new ArrayList<>();
+    }
+
+    private Snapshot parseFile(File f) {
+        if (f == null || !f.exists()) return null;
+        Snapshot snap = new Snapshot();
+        FileConfiguration yml = YamlConfiguration.loadConfiguration(f);
         for (String line : yml.getStringList("events")) {
             String[] p = line.split(";", -1); // time;type;victim;victimUuid;killer;killerUuid;cause;kElo;vElo
             if (p.length != 9) continue;
@@ -344,10 +551,10 @@ public class StatsManager {
                 ev.cause = p[6];
                 ev.killerElo = Integer.parseInt(p[7]);
                 ev.victimElo = Integer.parseInt(p[8]);
-                events.add(ev);
+                snap.events.add(ev);
             } catch (IllegalArgumentException ignored) { /* skip bad line */ }
         }
-        if (!yml.isConfigurationSection("players")) return;
+        if (!yml.isConfigurationSection("players")) return snap;
         for (String key : yml.getConfigurationSection("players").getKeys(false)) {
             try {
                 UUID uuid = UUID.fromString(key);
@@ -362,23 +569,38 @@ public class StatsManager {
                 s.playtimeSeconds = yml.getLong("players." + key + ".playtime-seconds", 0);
                 s.playtimeHoursPaid = yml.getLong("players." + key + ".playtime-hours-paid", 0);
                 s.sessionStart = 0;
+                s.firstJoined = yml.getLong("players." + key + ".first-joined", 0);
                 s.skinUrl = yml.getString("players." + key + ".skin", null);
                 for (String line : yml.getStringList("players." + key + ".fights")) {
                     String[] parts = line.split(";", 4); // time;win;change;opponent
                     if (parts.length < 4) continue;
                     try {
-                        Fight f = new Fight();
-                        f.time = Long.parseLong(parts[0]);
-                        f.win = "1".equals(parts[1]);
-                        f.eloChange = Integer.parseInt(parts[2]);
-                        f.opponent = parts[3];
-                        s.fights.add(f);
+                        Fight fi = new Fight();
+                        fi.time = Long.parseLong(parts[0]);
+                        fi.win = "1".equals(parts[1]);
+                        fi.eloChange = Integer.parseInt(parts[2]);
+                        fi.opponent = parts[3];
+                        s.fights.add(fi);
                     } catch (NumberFormatException ignored) { /* skip bad line */ }
                 }
-                stats.put(uuid, s);
+                snap.players.put(uuid, s);
             } catch (IllegalArgumentException ignored) {
                 plugin.getLogger().log(Level.WARNING, "Skipping malformed stats entry: " + key);
             }
+        }
+        return snap;
+    }
+
+    public synchronized void load() {
+        Snapshot snap = parseFile(file);
+        if (snap == null) return;
+        events.addAll(snap.events);
+        stats.putAll(snap.players);
+        // Backfill: players saved before "first-joined" existed get today's date,
+        // i.e. they'll show up in the Joined feed the first time this update runs.
+        long now = System.currentTimeMillis();
+        for (PlayerStats s : stats.values()) {
+            if (s.firstJoined == 0) s.firstJoined = now;
         }
     }
 
@@ -394,6 +616,7 @@ public class StatsManager {
             yml.set(base + "pvp-matches", s.pvpMatches);
             yml.set(base + "playtime-seconds", s.playtimeSeconds);
             yml.set(base + "playtime-hours-paid", s.playtimeHoursPaid);
+            yml.set(base + "first-joined", s.firstJoined);
             if (s.skinUrl != null) yml.set(base + "skin", s.skinUrl);
             List<String> fl = new ArrayList<>();
             for (Fight f : s.fights) fl.add(f.time + ";" + (f.win ? "1" : "0") + ";" + f.eloChange + ";" + f.opponent);

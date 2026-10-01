@@ -24,6 +24,11 @@ public class OnlineApiPlugin extends JavaPlugin {
         saveDefaultConfig();
 
         statsManager = new StatsManager(this);
+        if (getCommand("stats") != null) {
+            ResetCommand cmd = new ResetCommand(statsManager);
+            getCommand("stats").setExecutor(cmd);
+            getCommand("stats").setTabCompleter(cmd);
+        }
         getServer().getPluginManager().registerEvents(new StatsListener(statsManager, this), this);
 
         // Anyone already online when /reload happened should get a session start too.
@@ -39,10 +44,11 @@ public class OnlineApiPlugin extends JavaPlugin {
             server.createContext("/api/online", new OnlineHandler(apiKey));
             server.createContext("/api/stats", new StatsHttpHandler(statsManager, apiKey));
             server.createContext("/api/events", new EventsHttpHandler(statsManager, apiKey));
+            server.createContext("/api/teams", new TeamsHttpHandler(statsManager, apiKey));
             server.setExecutor(null); // small endpoints, default executor is plenty
             server.start();
             getLogger().info("API listening on port " + port
-                    + " (endpoints: /api/online, /api/stats, /api/events)");
+                    + " (endpoints: /api/online, /api/stats, /api/events, /api/teams)");
         } catch (IOException e) {
             getLogger().severe("Could not start API HTTP server: " + e.getMessage());
         }

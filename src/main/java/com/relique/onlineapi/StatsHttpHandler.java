@@ -62,6 +62,7 @@ public class StatsHttpHandler implements HttpHandler {
             case "kd":       cmp = Comparator.comparingDouble(StatsManager.PlayerStats::kd); break;
             case "playtime": cmp = Comparator.comparingLong(s -> s.playtimeSeconds); break;
             case "blocks":   cmp = Comparator.comparingInt(s -> s.blocksMined); break;
+            case "joined":   cmp = Comparator.comparingLong(s -> s.firstJoined); break;
             case "elo":
             default:         cmp = Comparator.comparingDouble(s -> s.elo); break;
         }
@@ -88,6 +89,7 @@ public class StatsHttpHandler implements HttpHandler {
                     .append("\"kd\":").append(String.format("%.2f", s.kd())).append(",")
                     .append("\"blocks_mined\":").append(s.blocksMined).append(",")
                     .append("\"playtime_seconds\":").append(currentPlaytime(s)).append(",")
+                    .append("\"first_joined\":").append(s.firstJoined).append(",")
                     .append("\"recent_fights\":[");
             boolean firstFight = true;
             for (StatsManager.Fight f : s.fights) {

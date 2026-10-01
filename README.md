@@ -25,7 +25,7 @@ Every player the plugin has ever seen (online or not), with everything a
 leaderboard needs: **Elo, kills, deaths, K/D, playtime, blocks mined**.
 
 Query params (all optional):
-- `sort` — `elo` (default), `kills`, `deaths`, `kd`, `playtime`, `blocks`
+- `sort` — `elo` (default), `kills`, `deaths`, `kd`, `playtime`, `blocks`, `joined`
 - `order` — `desc` (default) or `asc`
 - `limit` — top N results only
 
@@ -35,6 +35,7 @@ GET /api/stats                          -> everyone, ranked by Elo
 GET /api/stats?sort=kills&limit=10      -> top 10 by kills
 GET /api/stats?sort=blocks&limit=10     -> top 10 by blocks mined
 GET /api/stats?sort=kd&order=asc        -> worst K/D first
+GET /api/stats?sort=joined&order=asc    -> everyone, oldest join first
 ```
 
 ```json
@@ -49,14 +50,42 @@ GET /api/stats?sort=kd&order=asc        -> worst K/D first
       "deaths": 19,
       "kd": 1.95,
       "blocks_mined": 5820,
-      "playtime_seconds": 145200
+      "playtime_seconds": 145200,
+      "first_joined": 1727740800000
     }
   ]
 }
 ```
 
-Both endpoints send `Access-Control-Allow-Origin: *` so your website can
-`fetch()` them directly.
+`first_joined` is an epoch-millis timestamp for the first time the plugin
+ever saw that player. Existing players (from before this field existed) get
+backfilled with the moment this update first runs, not a fake old date.
+
+### `GET /api/teams`
+Live team data read straight from the **BetterTeams** plugin, if it's
+installed and enabled. This endpoint always responds (never 500s) — if
+BetterTeams isn't on the server, or its version doesn't match what this
+plugin expects, you just get `"available": false`.
+
+```json
+{
+  "available": true,
+  "teams": [
+    {
+      "name": "hesw",
+      "tag": "HESW",
+      "members": [
+        { "name": "NotmyaltBG", "uuid": "069a79f4-44e9-4726-a5be-fca90e38aaf5", "rank": "OWNER", "online": false }
+      ]
+    }
+  ]
+}
+```
+
+`rank` is one of `OWNER`, `ADMIN`, `DEFAULT` (BetterTeams' own ranks).
+
+Both stats-style endpoints send `Access-Control-Allow-Origin: *` so your
+website can `fetch()` them directly.
 
 ## How the Elo system works
 
@@ -167,3 +196,22 @@ this API (mixed content). Put the port behind HTTPS via a reverse proxy
 (nginx/Caddy + Let's Encrypt) or a tunnel like Cloudflare Tunnel, then send
 me the final `https://` URL (and API key, if set) and I'll wire the site's
 leaderboard up to it.
+
+## Resetting and reverting stats
+
+Requires the `reliqueapi.reset` permission (OP by default).
+
+| Command | What it does |
+| --- | --- |
+| `/stats reset all` | Asks to wipe everyone's stats and the events feed |
+| `/stats reset <player>` | Asks to reset one player |
+| `/stats confirm` | Confirms the pending action (must be within 30 seconds) |
+| `/stats backups` | Lists saved backups, newest first |
+| `/stats revert [number]` | Asks to restore a backup (default: newest) |
+
+Every reset saves a copy of `stats.yml` to `plugins/ReliqueOnlineAPI/backups/`
+first, and if the backup can't be written the reset is cancelled. A backup made
+by a single-player reset only restores that player, so everyone else's progress
+since then is kept. Reverting also backs up the current stats first, so a revert
+can be undone too. The old `/statsreset` command still works as an alias for
+`/stats reset`. Backups are never deleted automatically.
