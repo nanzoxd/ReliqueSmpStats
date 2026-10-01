@@ -10,7 +10,6 @@ import org.bukkit.plugin.Plugin;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.Collection;
 import java.util.UUID;
 
 /**
@@ -62,12 +61,17 @@ public class TeamsHttpHandler implements HttpHandler {
             Class<?> mainClass = Class.forName("com.booksaw.betterTeams.Main");
             Object teamManager = mainClass.getMethod("getTeamManager").invoke(bt);
             Object rawTeams = teamManager.getClass().getMethod("getLoadedTeamListClone").invoke(teamManager);
-            if (!(rawTeams instanceof Collection)) return "{\"available\":false,\"teams\":[]}";
+            Iterable<?> teamIterable = toIterable(rawTeams);
+            if (teamIterable == null) {
+                logOnce("getLoadedTeamListClone returned an unsupported type: "
+                        + (rawTeams == null ? "null" : rawTeams.getClass().getName()));
+                return "{\"available\":false,\"teams\":[]}";
+            }
 
             StringBuilder json = new StringBuilder();
             json.append("{\"available\":true,\"teams\":[");
             boolean firstTeam = true;
-            for (Object team : (Collection<?>) rawTeams) {
+            for (Object team : teamIterable) {
                 String teamJson = teamToJson(team);
                 if (teamJson == null) continue;
                 if (!firstTeam) json.append(",");
@@ -77,8 +81,35 @@ public class TeamsHttpHandler implements HttpHandler {
             json.append("]}");
             return json.toString();
         } catch (Throwable t) {
+            logOnce("Could not read BetterTeams: " + t);
             return "{\"available\":false,\"teams\":[]}";
         }
+    }
+
+    private boolean logged = false;
+
+    private void logOnce(String msg) {
+        if (logged) return;
+        logged = true;
+        Bukkit.getLogger().warning("[ReliqueOnlineAPI] /api/teams: " + msg);
+    }
+
+    /**
+     * BetterTeams returns different container types across versions (Map<UUID, Team> in
+     * current releases, Collections in older ones, custom Iterable sets for members).
+     */
+    private Iterable<?> toIterable(Object raw) {
+        if (raw == null) return null;
+        if (raw instanceof java.util.Map) return ((java.util.Map<?, ?>) raw).values();
+        if (raw instanceof Iterable) return (Iterable<?>) raw;
+        for (String m : new String[]{"getClone", "getMembersClone", "getAll"}) {
+            try {
+                Object r = raw.getClass().getMethod(m).invoke(raw);
+                if (r instanceof java.util.Map) return ((java.util.Map<?, ?>) r).values();
+                if (r instanceof Iterable) return (Iterable<?>) r;
+            } catch (Throwable ignored) { }
+        }
+        return null;
     }
 
     /** Builds one team's JSON, or null if this particular team couldn't be read. */
@@ -96,8 +127,9 @@ public class TeamsHttpHandler implements HttpHandler {
 
             Object rawMembers = teamClass.getMethod("getMembers").invoke(team);
             boolean firstMember = true;
-            if (rawMembers instanceof Collection) {
-                for (Object tp : (Collection<?>) rawMembers) {
+            Iterable<?> memberIterable = toIterable(rawMembers);
+            if (memberIterable != null) {
+                for (Object tp : memberIterable) {
                     String memberJson = memberToJson(tp);
                     if (memberJson == null) continue;
                     if (!firstMember) json.append(",");
@@ -108,6 +140,7 @@ public class TeamsHttpHandler implements HttpHandler {
             json.append("]}");
             return json.toString();
         } catch (Throwable t) {
+            logOnce("Could not read a team: " + t);
             return null;
         }
     }
