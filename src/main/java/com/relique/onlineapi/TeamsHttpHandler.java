@@ -58,9 +58,17 @@ public class TeamsHttpHandler implements HttpHandler {
         if (bt == null || !bt.isEnabled()) return "{\"available\":false,\"teams\":[]}";
 
         try {
-            Class<?> mainClass = Class.forName("com.booksaw.betterTeams.Main");
-            Object teamManager = mainClass.getMethod("getTeamManager").invoke(bt);
-            Object rawTeams = teamManager.getClass().getMethod("getLoadedTeamListClone").invoke(teamManager);
+            ClassLoader cl = bt.getClass().getClassLoader();
+            // BetterTeams exposes its manager as a STATIC on Team, not on the plugin instance.
+            Class<?> teamClass = Class.forName("com.booksaw.betterTeams.Team", true, cl);
+            Object teamManager = teamClass.getMethod("getTeamManager").invoke(null);
+            if (teamManager == null) {
+                logOnce("Team.getTeamManager() returned null (BetterTeams not finished loading?)");
+                return "{\"available\":false,\"teams\":[]}";
+            }
+            // Look the method up on the public TeamManager type, not the (maybe non-public) implementation.
+            Class<?> managerType = Class.forName("com.booksaw.betterTeams.team.TeamManager", true, cl);
+            Object rawTeams = managerType.getMethod("getLoadedTeamListClone").invoke(teamManager);
             Iterable<?> teamIterable = toIterable(rawTeams);
             if (teamIterable == null) {
                 logOnce("getLoadedTeamListClone returned an unsupported type: "
@@ -117,7 +125,8 @@ public class TeamsHttpHandler implements HttpHandler {
         try {
             Class<?> teamClass = team.getClass();
             String name = String.valueOf(teamClass.getMethod("getName").invoke(team));
-            String tag = safeString(teamClass, team, "getTag");
+            String tag = safeString(teamClass, team, "getOriginalTag");
+            if (tag != null && tag.isEmpty()) tag = null;
 
             StringBuilder json = new StringBuilder();
             json.append("{")
@@ -150,12 +159,7 @@ public class TeamsHttpHandler implements HttpHandler {
             Class<?> tpClass = teamPlayer.getClass();
             UUID uuid = (UUID) tpClass.getMethod("getPlayerUUID").invoke(teamPlayer);
             Object rankObj = tpClass.getMethod("getRank").invoke(teamPlayer);
-            boolean online;
-            try {
-                online = (boolean) tpClass.getMethod("isOnline").invoke(teamPlayer);
-            } catch (Throwable t) {
-                online = false;
-            }
+            boolean online = Bukkit.getPlayer(uuid) != null;
             String rank = rankObj == null ? "DEFAULT" : rankObj.toString();
             String pname = playerName(uuid);
 
