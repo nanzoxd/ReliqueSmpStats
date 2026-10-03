@@ -45,10 +45,11 @@ public class OnlineApiPlugin extends JavaPlugin {
             server.createContext("/api/stats", new StatsHttpHandler(statsManager, apiKey));
             server.createContext("/api/events", new EventsHttpHandler(statsManager, apiKey));
             server.createContext("/api/teams", new TeamsHttpHandler(statsManager, apiKey));
+            server.createContext("/api/ranked", new RankedHttpHandler(this, apiKey));
             server.setExecutor(null); // small endpoints, default executor is plenty
             server.start();
             getLogger().info("API listening on port " + port
-                    + " (endpoints: /api/online, /api/stats, /api/events, /api/teams)");
+                    + " (endpoints: /api/online, /api/stats, /api/events, /api/teams, /api/ranked)");
         } catch (IOException e) {
             getLogger().severe("Could not start API HTTP server: " + e.getMessage());
         }

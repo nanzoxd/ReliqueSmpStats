@@ -3,8 +3,8 @@ version: ${project.version}
 main: com.relique.onlineapi.OnlineApiPlugin
 api-version: "1.21"
 author: Relique
-description: Exposes online players, kills, deaths, K/D, blocks mined, playtime, a competitive Elo rating (kills + playtime rewards) and (if installed) BetterTeams data as JSON for the website.
-softdepend: [BetterTeams]
+description: Exposes online players, kills, deaths, K/D, blocks mined, playtime, a competitive Elo rating (kills + playtime rewards) (if installed) BetterTeams data and (if installed) the RankedSMPX rank list + config as JSON for the website.
+softdepend: [BetterTeams, RankedSMPX]
 commands:
   stats:
     description: Reset or revert Relique stats (asks for confirmation, backs up first)
