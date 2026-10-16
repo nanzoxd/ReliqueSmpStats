@@ -181,25 +181,29 @@ final class Ui {
     static Component inlineHead(UUID uuid, String name, String skinUrl) {
         if (!INLINE_HEADS) return Component.empty();
         try {
+            // 1) live skin of an online player (what SkinsRestorer applied, signed)
+            String value = null, signature = null;
+            Player online = uuid != null ? Bukkit.getPlayer(uuid) : (name != null ? Bukkit.getPlayerExact(name) : null);
+            if (online != null) {
+                for (ProfileProperty pp : online.getPlayerProfile().getProperties()) {
+                    if ("textures".equals(pp.getName())) { value = pp.getValue(); signature = pp.getSignature(); break; }
+                }
+            }
+            // 2) stored skin URL (offline players)
+            if (value == null && skinUrl != null && !skinUrl.isBlank()) {
+                String json = "{\"textures\":{\"SKIN\":{\"url\":\"" + skinUrl + "\"}}}";
+                value = Base64.getEncoder().encodeToString(json.getBytes(StandardCharsets.UTF_8));
+            }
+
             Object builder = PLAYER_HEAD.invoke(null);
             B_NAME.invoke(builder, name);
-            if (uuid != null) B_ID.invoke(builder, uuid);
-            if (B_PROP != null) {
-                String value = null, signature = null;
-                // 1) live skin of an online player (what SkinsRestorer applied, signed)
-                Player online = uuid != null ? Bukkit.getPlayer(uuid) : (name != null ? Bukkit.getPlayerExact(name) : null);
-                if (online != null) {
-                    for (ProfileProperty pp : online.getPlayerProfile().getProperties()) {
-                        if ("textures".equals(pp.getName())) { value = pp.getValue(); signature = pp.getSignature(); break; }
-                    }
-                }
-                // 2) stored skin URL (offline players)
-                if (value == null && skinUrl != null && !skinUrl.isBlank()) {
-                    String json = "{\"textures\":{\"SKIN\":{\"url\":\"" + skinUrl + "\"}}}";
-                    value = Base64.getEncoder().encodeToString(json.getBytes(StandardCharsets.UTF_8));
-                }
-                if (value != null) B_PROP.invoke(builder, PROP_NEW.invoke(null, "textures", value, signature));
+            if (value != null && B_PROP != null) {
+                // we know the skin: send it directly (name + id + textures)
+                if (uuid != null) B_ID.invoke(builder, uuid);
+                B_PROP.invoke(builder, PROP_NEW.invoke(null, "textures", value, signature));
             }
+            // else: name ONLY, so the client looks the skin up itself. Sending name AND uuid with no
+            // textures makes the client treat it as a finished profile and draw a default Steve/Alex.
             Object contents = B_BUILD.invoke(builder);
             return (Component) COMPONENT_OBJECT.invoke(null, contents);
         } catch (Throwable t) {

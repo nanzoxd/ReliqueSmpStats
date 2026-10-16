@@ -83,6 +83,7 @@ public final class LeaderboardDialog {
         // line of the same block so there is no empty gap before it.
         int fullWidth = buttonWidth * 2 + 10;
         List<Component> head = new ArrayList<>();
+        head.add(bold("ELO LEADERBOARD", PURPLE));
         if (rows.isEmpty()) head.add(t("No players found", RED));
         head.add(t("Players ranked by Elo", WHITE));
         head.add(t("See where you stand on the server", GRAY));
@@ -144,7 +145,7 @@ public final class LeaderboardDialog {
         ActionButton close = ActionButton.create(t("✖ Close", CLOSE_RED), null, buttonWidth, null);
 
         Dialog dialog = Dialog.create(b -> b.empty()
-                .base(DialogBase.builder(bold("ELO LEADERBOARD", PURPLE))
+                .base(DialogBase.builder(Component.empty())
                         .canCloseWithEscape(true)
                         .body(body)
                         .inputs(inputs)
