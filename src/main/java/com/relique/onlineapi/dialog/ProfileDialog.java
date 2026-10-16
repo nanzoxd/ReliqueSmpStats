@@ -84,12 +84,12 @@ public final class ProfileDialog {
         List<DialogBody> body = new ArrayList<>();
 
         // title: [head] Name, like the reference's icon + bold name
-        Component title = Component.textOfChildren(inlineHead(s.uuid, name), t(" ", WHITE), bold(name, GOLD));
+        Component title = Component.textOfChildren(inlineHead(s.uuid, name, s.skinUrl), t(" ", WHITE), bold(name, GOLD));
 
         // status line under the title
         List<Component> sub = new ArrayList<>();
         sub.add(t(online ? "Online" : "Offline", online ? GREEN : GRAY));
-        if (smpRank > 0) sub.add(t("SMP Rank #" + smpRank, GOLD));
+        if (smpRank > 0) sub.add(t("SMP Rank #" + smpRank, SKY));
         if (s.premium) sub.add(t("[PREMIUM]", GOLD));
         Component subLine = Component.empty();
         for (int i = 0; i < sub.size(); i++) {
@@ -102,7 +102,7 @@ public final class ProfileDialog {
         // rating / record / position / streak: one block
         body.add(line(lines(
                 kvLine("Rating", num(Math.round(s.elo)), GOLD)
-                        .append(t(" (Peak: " + num(Math.round(Math.max(s.peakElo, s.elo))) + ")", GRAY)),
+                        .append(t(" (Peak: " + num(Math.round(Math.max(s.peakElo, s.elo))) + ")", ORANGE)),
                 Component.textOfChildren(t("Record: ", GRAY), t(wins + "W", GREEN), t(" / ", GRAY),
                         t(losses + "L", RED), t(" (" + winRate + " WR)", GRAY)),
                 kvLine("Position", position > 0 ? "#" + position : NA, GOLD),
@@ -118,7 +118,7 @@ public final class ProfileDialog {
                 Component.textOfChildren(kvLine("Playtime", playtime(playtime), WHITE), sep(),
                         kvLine("Blocks Mined", num(s.blocksMined), WHITE)),
                 Component.textOfChildren(
-                        kvLine("SMP Rank", smpRank > 0 ? "#" + smpRank : NA, smpRank > 0 ? GOLD : GRAY), sep(),
+                        kvLine("SMP Rank", smpRank > 0 ? "#" + smpRank : NA, smpRank > 0 ? SKY : GRAY), sep(),
                         kvLine("First Joined", date(firstJoined), WHITE)),
                 kvLine("Last Seen", lastSeen, online ? GREEN : WHITE))));
         body.add(rule());
@@ -131,7 +131,7 @@ public final class ProfileDialog {
         } else {
             tier.add(t(orNa(s.tierPlatform), WHITE));
             tier.add(Component.textOfChildren(kvLine("Best Tier", s.tierBest, GOLD), sep(),
-                    kvLine("Gamemode", orNa(s.tierMode), WHITE)));
+                    kvLine("Gamemode", orNa(s.tierMode), YELLOW)));
             if (s.tierRank != null && !s.tierRank.isBlank()) tier.add(kvLine("Tier Rank", s.tierRank, WHITE));
         }
         body.add(line(Component.join(JoinConfiguration.newlines(), tier)));
@@ -149,7 +149,7 @@ public final class ProfileDialog {
             String change = f.eloChange > 0 ? "+" + f.eloChange : String.valueOf(f.eloChange);
             TextColor changeColor = f.eloChange > 0 ? GREEN : (f.eloChange < 0 ? RED : GRAY);
             fight.add(Component.textOfChildren(
-                    inlineHead(opp == null ? null : opp.uuid, f.opponent),
+                    inlineHead(opp == null ? null : opp.uuid, f.opponent, opp == null ? null : opp.skinUrl),
                     t(" " + f.opponent, WHITE), t("   " + (f.win ? "WIN" : "LOSS"), resultColor)));
             fight.add(Component.textOfChildren(
                     t(f.opponentElo >= 0 ? num(f.opponentElo) + " Elo" : NA + " Elo", GOLD),

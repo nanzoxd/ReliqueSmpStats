@@ -58,7 +58,7 @@ public final class LeaderboardDialog {
         this.buttonWidth = Math.max(120, Math.min(300, plugin.getConfig().getInt("dialogs.button-width", 180)));
     }
 
-    private record Row(int position, UUID uuid, String name, long elo) {}
+    private record Row(int position, UUID uuid, String name, long elo, String skin) {}
 
     public void open(Player viewer, State st) {
         List<PlayerStats> all = stats.leaderboard();
@@ -69,7 +69,7 @@ public final class LeaderboardDialog {
             PlayerStats s = all.get(i);
             String n = s.name == null ? "Unknown" : s.name;
             if (q.isEmpty() || n.toLowerCase(Locale.ROOT).contains(q)) {
-                rows.add(new Row(i + 1, s.uuid, n, Math.round(s.elo)));
+                rows.add(new Row(i + 1, s.uuid, n, Math.round(s.elo), s.skinUrl));
             }
         }
 
@@ -79,21 +79,22 @@ public final class LeaderboardDialog {
         int to = Math.min(rows.size(), from + perPage);
         final String query = st.query();
 
-        // ---- header text: one block, then a thin rule (like the reference)
+        // ---- header: ONE text block (title is the dialog title above it); the divider is the last
+        // line of the same block so there is no empty gap before it.
+        int fullWidth = buttonWidth * 2 + 10;
         List<Component> head = new ArrayList<>();
-        head.add(rows.isEmpty() ? t("No players found", RED)
-                : t("#" + rows.get(from).position() + " - #" + rows.get(to - 1).position(), WHITE));
-        head.add(t("Players ranked by Elo", GRAY));
+        if (rows.isEmpty()) head.add(t("No players found", RED));
+        head.add(t("Players ranked by Elo", WHITE));
+        head.add(t("See where you stand on the server", GRAY));
         head.add(Component.textOfChildren(
-                t("Page ", GRAY), t(String.valueOf(page + 1), WHITE), t(" / ", GRAY), t(String.valueOf(pages), WHITE)));
+                t("Page ", GRAY), t(String.valueOf(page + 1), GOLD), t(" / ", GRAY), t(String.valueOf(pages), GOLD)));
         if (!query.isEmpty()) {
             head.add(Component.textOfChildren(
                     t("Search: ", GRAY), t(query, GOLD), t("  (" + rows.size() + " found)", GRAY)));
         }
-        int fullWidth = buttonWidth * 2 + 10;
+        head.add(divider(fullWidth));
         List<DialogBody> body = new ArrayList<>();
         body.add(DialogBody.plainMessage(Component.join(net.kyori.adventure.text.JoinConfiguration.newlines(), head), fullWidth));
-        body.add(DialogBody.plainMessage(divider(fullWidth), fullWidth));
 
         // ---- search box
         List<DialogInput> inputs = List.of(
@@ -109,7 +110,7 @@ public final class LeaderboardDialog {
             Row r = rows.get(i);
             Component label = Component.textOfChildren(
                     t("#" + r.position() + " ", GOLD),
-                    inlineHead(r.uuid(), r.name()),
+                    inlineHead(r.uuid(), r.name(), r.skin()),
                     t(" " + r.name(), WHITE),
                     t("  " + num(r.elo()), GOLD));
             State back = new State(page, query);
@@ -130,8 +131,9 @@ public final class LeaderboardDialog {
                 hasNext ? t("Next Page →", WHITE) : t("Next Page →", DARK_GRAY), null, buttonWidth,
                 hasNext ? click((view, p) -> open(p, new State(page + 1, query))) : null));
         int myPos = stats.positionOf(viewer.getUniqueId());
+        PlayerStats mine = stats.find(viewer.getUniqueId());
         Component myLabel = Component.textOfChildren(
-                inlineHead(viewer.getUniqueId(), viewer.getName()),
+                inlineHead(viewer.getUniqueId(), viewer.getName(), mine == null ? null : mine.skinUrl),
                 t(" My Position", PURPLE),
                 myPos > 0 ? t(" #" + myPos, GOLD) : Component.empty());
         buttons.add(ActionButton.create(myLabel, t("Open your own profile", GRAY), buttonWidth,
