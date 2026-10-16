@@ -44,3 +44,16 @@ ranked:
   # How long (seconds) the answer is cached, so the site can't hammer the
   # database/config files. Config edits show up within this time.
   cache-seconds: 10
+
+# In-game leaderboard + player profile dialogs (/leaderboard, /pvpprofile). Needs Paper 1.21.6+.
+dialogs:
+  # Players per leaderboard page. Two columns, so keep it even (12 = 6 rows).
+  players-per-page: 12
+  # Width in pixels of each leaderboard button.
+  button-width: 180
+  # Width in pixels of the text blocks on the profile page.
+  profile-width: 320
+  # Time zone for dates and times, e.g. "Asia/Kolkata". Blank = the server's time zone.
+  timezone: ""
+  # Players with this permission get a [PREMIUM] badge on their profile. Blank = no badge.
+  premium-permission: ""

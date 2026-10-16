@@ -137,6 +137,32 @@ New players start at 700 Elo, so everyone begins as a **Rookie**. The
 thresholds and Grandmaster slot count live in `config.yml` / the `TIERS`
 array in `StatsManager.java` — send me new numbers any time and I'll adjust.
 
+## In-game leaderboard and profile (Dialog API)
+
+Needs **Paper 1.21.6+** (built against 1.21.11). Players run:
+
+| Command | What it does |
+| --- | --- |
+| `/leaderboard [search]` (`/lb`, `/elotop`) | Elo leaderboard: 12 per page, search box, Previous/Next, My Position, Find Player, Close |
+| `/pvpprofile [player]` (`/pvpstats`) | One-page profile: rating, record, position, streak, stats, best tier, latest fight |
+| `/besttier <player> <platform> <tier> <gamemode> [rank]` | Staff: set the Best PvP Tier shown on a profile (`_` = space). `/besttier <player> clear` removes it |
+
+Clicking a leaderboard row opens that player's profile; **Back to Leaderboard** returns to the same
+page and search. Anything the plugin has no data for shows `N/A` (best tier shows `Not ranked`).
+Wins = PvP kills, Losses = deaths to another player, SMP Rank = the RankedSMPX rank number.
+Settings live under `dialogs:` in `config.yml` (page size, widths, time zone, premium permission).
+
+## PlaceholderAPI placeholders (identifier `relique`)
+
+Per player: `%relique_elo%` `%relique_peak_elo%` `%relique_position%` `%relique_wins%` `%relique_losses%`
+`%relique_winrate%` `%relique_kills%` `%relique_deaths%` `%relique_kd%` `%relique_streak%`
+`%relique_best_streak%` `%relique_playtime%` `%relique_playtime_hours%` `%relique_blocks%`
+`%relique_smp_rank%` `%relique_first_joined%` `%relique_last_seen%` `%relique_premium%`
+`%relique_tier_platform%` `%relique_tier_best%` `%relique_tier_mode%` `%relique_tier_rank%`
+
+Leaderboard: `%relique_top_<n>_name%` `%relique_top_<n>_elo%` `%relique_top_<n>_kills%`
+`%relique_top_<n>_deaths%` `%relique_top_<n>_kd%` `%relique_total_players%`
+
 ## Storage
 
 Stats persist in `plugins/ReliqueOnlineAPI/stats.yml`, autosaved on the

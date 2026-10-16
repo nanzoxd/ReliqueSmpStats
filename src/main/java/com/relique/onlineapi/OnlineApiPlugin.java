@@ -30,10 +30,13 @@ public class OnlineApiPlugin extends JavaPlugin {
             getCommand("stats").setTabCompleter(cmd);
         }
         getServer().getPluginManager().registerEvents(new StatsListener(statsManager, this), this);
+        com.relique.onlineapi.dialog.Dialogs.init(this, statsManager);
 
         // Anyone already online when /reload happened should get a session start too.
+        String premiumPerm = getConfig().getString("dialogs.premium-permission", "");
         for (Player p : Bukkit.getOnlinePlayers()) {
             statsManager.onJoin(p.getUniqueId(), p.getName());
+            if (!premiumPerm.isBlank()) statsManager.setPremium(p.getUniqueId(), p.getName(), p.hasPermission(premiumPerm));
         }
 
         int port = getConfig().getInt("port", 8123);
@@ -63,6 +66,7 @@ public class OnlineApiPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        com.relique.onlineapi.dialog.Dialogs.shutdown();
         if (server != null) {
             server.stop(0);
         }

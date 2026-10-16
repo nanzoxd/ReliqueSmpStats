@@ -42,6 +42,13 @@ public class StatsListener implements Listener {
         captureSkin(p);
         Bukkit.getScheduler().runTaskLater(plugin, () -> { if (p.isOnline()) captureSkin(p); }, 40L);
         Bukkit.getScheduler().runTaskLater(plugin, () -> { if (p.isOnline()) captureSkin(p); }, 200L);
+        // permission plugins may attach a moment after join, so check the premium flag a little later
+        Bukkit.getScheduler().runTaskLater(plugin, () -> { if (p.isOnline()) refreshPremium(p); }, 60L);
+    }
+
+    private void refreshPremium(Player p) {
+        String perm = plugin.getConfig().getString("dialogs.premium-permission", "");
+        if (perm != null && !perm.isBlank()) stats.setPremium(p.getUniqueId(), p.getName(), p.hasPermission(perm));
     }
 
     /** Saves the skin URL the server currently shows for this player, whatever plugin set it. */
@@ -64,6 +71,7 @@ public class StatsListener implements Listener {
 
     @EventHandler
     public void onQuit(PlayerQuitEvent e) {
+        refreshPremium(e.getPlayer());
         stats.onQuit(e.getPlayer().getUniqueId());
     }
 

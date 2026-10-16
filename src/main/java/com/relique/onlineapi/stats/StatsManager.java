@@ -63,6 +63,7 @@ public class StatsManager {
         public String opponent;
         public boolean win;
         public int eloChange;    // 0 when the same-pair cooldown blocked the Elo change
+        public int opponentElo = -1; // opponent's Elo right after the fight, -1 if unknown (older saves)
     }
 
     private static final int MAX_FIGHTS = 10;
@@ -96,6 +97,16 @@ public class StatsManager {
         public long sessionStart;       // epoch millis this session began, 0 if offline
         public long firstJoined;        // epoch millis the server first saw this player, 0 if unknown
         public String skinUrl;          // skin texture URL as the server sees it (works with skin plugins), may be null
+        public double peakElo;          // highest Elo ever reached
+        public int pvpDeaths;           // deaths caused by another player (the L in W/L)
+        public int winStreak;           // current PvP win streak
+        public int bestWinStreak;       // highest PvP win streak ever
+        public long lastSeen;           // epoch millis of last quit, 0 if unknown
+        public boolean premium;         // had the premium permission last time we saw them online
+        public String tierPlatform;     // e.g. MCTiers, null if not set
+        public String tierBest;         // e.g. HT3
+        public String tierMode;         // e.g. Sword
+        public String tierRank;         // e.g. #12, may be null
         public final List<Fight> fights = new ArrayList<>();
 
         public double kd() {
@@ -147,6 +158,7 @@ public class StatsManager {
             s.uuid = uuid;
             s.name = name;
             s.elo = startingElo;
+            s.peakElo = startingElo;
             s.firstJoined = System.currentTimeMillis();
             stats.put(uuid, s);
         } else if (name != null) {
@@ -174,6 +186,7 @@ public class StatsManager {
         if (s == null || s.sessionStart == 0) return;
         s.playtimeSeconds += (System.currentTimeMillis() - s.sessionStart) / 1000L;
         s.sessionStart = 0;
+        s.lastSeen = System.currentTimeMillis();
         payPlaytimeElo(s, null); // player is leaving, no point messaging them
     }
 
@@ -201,6 +214,7 @@ public class StatsManager {
         long newHours = wholeHoursNow - s.playtimeHoursPaid;
         double gain = newHours * playtimeEloPerHour;
         s.elo += gain;
+        if (s.elo > s.peakElo) s.peakElo = s.elo;
         s.playtimeHoursPaid = wholeHoursNow;
         if (online != null) {
             online.sendMessage("§b+" + Math.round(gain) + " Elo §7for " + newHours
@@ -209,12 +223,13 @@ public class StatsManager {
         }
     }
 
-    private void addFight(PlayerStats s, String opponent, boolean win, int eloChange) {
+    private void addFight(PlayerStats s, String opponent, boolean win, int eloChange, int opponentElo) {
         Fight f = new Fight();
         f.time = System.currentTimeMillis();
         f.opponent = opponent;
         f.win = win;
         f.eloChange = eloChange;
+        f.opponentElo = opponentElo;
         s.fights.add(0, f);
         while (s.fights.size() > MAX_FIGHTS) s.fights.remove(s.fights.size() - 1);
     }
@@ -268,6 +283,7 @@ public class StatsManager {
 
         killer.kills++;
         victim.deaths++;
+        victim.pvpDeaths++;
 
         KillResult result = new KillResult();
         result.killerEloBefore = killer.elo;
@@ -300,8 +316,12 @@ public class StatsManager {
         result.victimEloAfter = victim.elo;
         result.killerRankAfter = rankOf(killer);
         result.victimRankAfter = rankOf(victim);
-        addFight(killer, victim.name, true, result.kGain());
-        addFight(victim, killer.name, false, result.vChange());
+        if (killer.elo > killer.peakElo) killer.peakElo = killer.elo;
+        killer.winStreak++;
+        if (killer.winStreak > killer.bestWinStreak) killer.bestWinStreak = killer.winStreak;
+        victim.winStreak = 0;
+        addFight(killer, victim.name, true, result.kGain(), (int) Math.round(victim.elo));
+        addFight(victim, killer.name, false, result.vChange(), (int) Math.round(killer.elo));
         addEvent("pvp", victim.name, victimUuid, killer.name, killerUuid, cause, result.kGain(), result.vChange());
         return result;
     }
@@ -371,6 +391,10 @@ public class StatsManager {
         target.deaths = 0;
         target.blocksMined = 0;
         target.pvpMatches = 0;
+        target.peakElo = startingElo;
+        target.pvpDeaths = 0;
+        target.winStreak = 0;
+        target.bestWinStreak = 0;
         target.playtimeSeconds = 0;
         target.playtimeHoursPaid = 0;
         target.fights.clear();
@@ -385,7 +409,7 @@ public class StatsManager {
         return findByName(name) != null;
     }
 
-    private PlayerStats findByName(String name) {
+    public synchronized PlayerStats findByName(String name) {
         for (PlayerStats s : stats.values()) {
             if (s.name != null && s.name.equalsIgnoreCase(name)) return s;
         }
@@ -523,6 +547,52 @@ public class StatsManager {
         return true;
     }
 
+    // ------------------------------------------------------------------ leaderboard helpers
+
+    private List<PlayerStats> lbCache = new ArrayList<>();
+    private long lbCacheAt = 0;
+
+    /** Every known player, highest Elo first (ties: more kills, then name). Cached for ~1s. */
+    public synchronized List<PlayerStats> leaderboard() {
+        long now = System.currentTimeMillis();
+        if (now - lbCacheAt > 1000L) {
+            List<PlayerStats> list = new ArrayList<>(stats.values());
+            list.sort(Comparator.comparingDouble((PlayerStats s) -> s.elo).reversed()
+                    .thenComparing(Comparator.comparingInt((PlayerStats s) -> s.kills).reversed())
+                    .thenComparing(s -> s.name == null ? "" : s.name.toLowerCase()));
+            lbCache = list;
+            lbCacheAt = now;
+        }
+        return lbCache;
+    }
+
+    /** 1-based leaderboard position, or -1 if the player is unknown. */
+    public synchronized int positionOf(UUID uuid) {
+        List<PlayerStats> list = leaderboard();
+        for (int i = 0; i < list.size(); i++) {
+            if (list.get(i).uuid.equals(uuid)) return i + 1;
+        }
+        return -1;
+    }
+
+    public synchronized void setPremium(UUID uuid, String name, boolean premium) {
+        get(uuid, name).premium = premium;
+    }
+
+    /** Sets the best PvP tier shown on a player's profile (platform e.g. MCTiers). */
+    public synchronized void setTier(UUID uuid, String platform, String best, String mode, String rank) {
+        PlayerStats s = stats.get(uuid);
+        if (s == null) return;
+        s.tierPlatform = platform;
+        s.tierBest = best;
+        s.tierMode = mode;
+        s.tierRank = rank;
+    }
+
+    public synchronized void clearTier(UUID uuid) {
+        setTier(uuid, null, null, null, null);
+    }
+
     public synchronized Collection<PlayerStats> all() {
         return stats.values();
     }
@@ -570,9 +640,20 @@ public class StatsManager {
                 s.playtimeHoursPaid = yml.getLong("players." + key + ".playtime-hours-paid", 0);
                 s.sessionStart = 0;
                 s.firstJoined = yml.getLong("players." + key + ".first-joined", 0);
+                s.peakElo = Math.max(s.elo, yml.getDouble("players." + key + ".peak-elo", 0));
+                // Older saves never separated PvP deaths from other deaths; use total deaths once.
+                s.pvpDeaths = yml.getInt("players." + key + ".pvp-deaths", s.deaths);
+                s.winStreak = yml.getInt("players." + key + ".win-streak", 0);
+                s.bestWinStreak = Math.max(s.winStreak, yml.getInt("players." + key + ".best-win-streak", 0));
+                s.lastSeen = yml.getLong("players." + key + ".last-seen", 0);
+                s.premium = yml.getBoolean("players." + key + ".premium", false);
+                s.tierPlatform = yml.getString("players." + key + ".tier.platform", null);
+                s.tierBest = yml.getString("players." + key + ".tier.best", null);
+                s.tierMode = yml.getString("players." + key + ".tier.mode", null);
+                s.tierRank = yml.getString("players." + key + ".tier.rank", null);
                 s.skinUrl = yml.getString("players." + key + ".skin", null);
                 for (String line : yml.getStringList("players." + key + ".fights")) {
-                    String[] parts = line.split(";", 4); // time;win;change;opponent
+                    String[] parts = line.split(";", 5); // time;win;change;opponent[;opponentElo]
                     if (parts.length < 4) continue;
                     try {
                         Fight fi = new Fight();
@@ -580,6 +661,7 @@ public class StatsManager {
                         fi.win = "1".equals(parts[1]);
                         fi.eloChange = Integer.parseInt(parts[2]);
                         fi.opponent = parts[3];
+                        fi.opponentElo = parts.length >= 5 ? Integer.parseInt(parts[4]) : -1;
                         s.fights.add(fi);
                     } catch (NumberFormatException ignored) { /* skip bad line */ }
                 }
@@ -617,9 +699,19 @@ public class StatsManager {
             yml.set(base + "playtime-seconds", s.playtimeSeconds);
             yml.set(base + "playtime-hours-paid", s.playtimeHoursPaid);
             yml.set(base + "first-joined", s.firstJoined);
+            yml.set(base + "peak-elo", s.peakElo);
+            yml.set(base + "pvp-deaths", s.pvpDeaths);
+            yml.set(base + "win-streak", s.winStreak);
+            yml.set(base + "best-win-streak", s.bestWinStreak);
+            yml.set(base + "last-seen", s.lastSeen);
+            yml.set(base + "premium", s.premium);
+            if (s.tierPlatform != null) yml.set(base + "tier.platform", s.tierPlatform);
+            if (s.tierBest != null) yml.set(base + "tier.best", s.tierBest);
+            if (s.tierMode != null) yml.set(base + "tier.mode", s.tierMode);
+            if (s.tierRank != null) yml.set(base + "tier.rank", s.tierRank);
             if (s.skinUrl != null) yml.set(base + "skin", s.skinUrl);
             List<String> fl = new ArrayList<>();
-            for (Fight f : s.fights) fl.add(f.time + ";" + (f.win ? "1" : "0") + ";" + f.eloChange + ";" + f.opponent);
+            for (Fight f : s.fights) fl.add(f.time + ";" + (f.win ? "1" : "0") + ";" + f.eloChange + ";" + f.opponent + ";" + f.opponentElo);
             yml.set(base + "fights", fl);
         }
         List<String> evLines = new ArrayList<>();
