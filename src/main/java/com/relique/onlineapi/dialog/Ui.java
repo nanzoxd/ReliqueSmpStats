@@ -1,6 +1,7 @@
 package com.relique.onlineapi.dialog;
 
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.JoinConfiguration;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextColor;
 import net.kyori.adventure.text.format.TextDecoration;
@@ -54,8 +55,16 @@ final class Ui {
         return Component.textOfChildren(t(label + ": ", GRAY), t(value, valueColor));
     }
 
-    static Component divider() {
-        return t("--------------------------------", BLUE);
+    /** Thin horizontal rule like the reference: struck-through spaces, ~70% of the given pixel width. */
+    static Component divider(int widthPx) {
+        int spaces = Math.max(10, widthPx * 7 / 40);
+        return Component.text(" ".repeat(spaces), BLUE).decoration(TextDecoration.STRIKETHROUGH, true)
+                .decoration(TextDecoration.ITALIC, false);
+    }
+
+    /** Several lines in ONE dialog text block (separate blocks get a big gap between them). */
+    static Component lines(Component... parts) {
+        return Component.join(JoinConfiguration.newlines(), parts);
     }
 
     // ------------------------------------------------------------ formatting
@@ -152,7 +161,7 @@ final class Ui {
         try {
             Object builder = PLAYER_HEAD.invoke(null);
             B_NAME.invoke(builder, name);
-            B_ID.invoke(builder, uuid);
+            if (uuid != null) B_ID.invoke(builder, uuid);
             Object contents = B_BUILD.invoke(builder);
             return (Component) COMPONENT_OBJECT.invoke(null, contents);
         } catch (Throwable t) {

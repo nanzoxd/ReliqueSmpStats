@@ -79,20 +79,21 @@ public final class LeaderboardDialog {
         int to = Math.min(rows.size(), from + perPage);
         final String query = st.query();
 
-        // ---- header text
-        List<DialogBody> body = new ArrayList<>();
-        if (rows.isEmpty()) {
-            body.add(DialogBody.plainMessage(t("No players found", RED)));
-        } else {
-            body.add(DialogBody.plainMessage(t("#" + rows.get(from).position() + " - #" + rows.get(to - 1).position(), WHITE)));
-        }
-        body.add(DialogBody.plainMessage(t("Players ranked by Elo", GRAY)));
-        body.add(DialogBody.plainMessage(Component.textOfChildren(
-                t("Page ", GRAY), t(String.valueOf(page + 1), WHITE), t(" / ", GRAY), t(String.valueOf(pages), WHITE))));
+        // ---- header text: one block, then a thin rule (like the reference)
+        List<Component> head = new ArrayList<>();
+        head.add(rows.isEmpty() ? t("No players found", RED)
+                : t("#" + rows.get(from).position() + " - #" + rows.get(to - 1).position(), WHITE));
+        head.add(t("Players ranked by Elo", GRAY));
+        head.add(Component.textOfChildren(
+                t("Page ", GRAY), t(String.valueOf(page + 1), WHITE), t(" / ", GRAY), t(String.valueOf(pages), WHITE)));
         if (!query.isEmpty()) {
-            body.add(DialogBody.plainMessage(Component.textOfChildren(
-                    t("Search: ", GRAY), t(query, GOLD), t("  (" + rows.size() + " found)", GRAY))));
+            head.add(Component.textOfChildren(
+                    t("Search: ", GRAY), t(query, GOLD), t("  (" + rows.size() + " found)", GRAY)));
         }
+        int fullWidth = buttonWidth * 2 + 10;
+        List<DialogBody> body = new ArrayList<>();
+        body.add(DialogBody.plainMessage(Component.join(net.kyori.adventure.text.JoinConfiguration.newlines(), head), fullWidth));
+        body.add(DialogBody.plainMessage(divider(fullWidth), fullWidth));
 
         // ---- search box
         List<DialogInput> inputs = List.of(
