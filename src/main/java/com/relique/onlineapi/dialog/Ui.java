@@ -164,7 +164,9 @@ final class Ui {
                 Class<?> prop = Class.forName("net.kyori.adventure.text.object.PlayerHeadObjectContents$ProfileProperty");
                 pn = prop.getMethod("profileProperty", String.class, String.class, String.class);
                 bp = builder.getMethod("profileProperty", prop);
-            } catch (Throwable ignored) { /* name/uuid only */ }
+            } catch (Throwable t) {
+                Bukkit.getLogger().warning("[ReliqueStats] Skin property for heads unavailable on this server: " + t);
+            }
         } catch (Throwable ignored) { /* not available */ }
         PLAYER_HEAD = ph; B_NAME = bn; B_ID = bi; B_PROP = bp; B_BUILD = bb; PROP_NEW = pn; COMPONENT_OBJECT = co;
         INLINE_HEADS = ok;
@@ -201,7 +203,13 @@ final class Ui {
             Object contents = B_BUILD.invoke(builder);
             return (Component) COMPONENT_OBJECT.invoke(null, contents);
         } catch (Throwable t) {
+            if (!warned) {
+                warned = true;
+                Bukkit.getLogger().warning("[ReliqueStats] Could not build head for " + name + ": " + t);
+            }
             return Component.empty();
         }
     }
+
+    private static volatile boolean warned;
 }
