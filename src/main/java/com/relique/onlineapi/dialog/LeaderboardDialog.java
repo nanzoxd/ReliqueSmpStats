@@ -110,7 +110,8 @@ public final class LeaderboardDialog {
         for (int i = from; i < to; i++) {
             Row r = rows.get(i);
             Component label = Component.textOfChildren(
-                    bold("#" + r.position() + " ", rankColor(r.position())),
+                    t("#", rankColor(r.position())),
+                    bold(r.position() + " ", rankColor(r.position())),
                     inlineHead(r.uuid(), r.name(), r.skin()),
                     t(" " + r.name(), WHITE),
                     t("  " + num(r.elo()), LB_TITLE));
@@ -122,7 +123,7 @@ public final class LeaderboardDialog {
         // centred by the client, which leaves a big gap under the icon; a full one sits tight.
         for (int i = to; i < from + perPage; i++) {
             buttons.add(ActionButton.create(Component.textOfChildren(
-                    bold("#" + (i + 1) + " ", DARK_GRAY), t("-", DARK_GRAY)), null, buttonWidth, null));
+                    t("#", DARK_GRAY), bold((i + 1) + " ", DARK_GRAY), t("-", DARK_GRAY)), null, buttonWidth, null));
         }
 
         boolean hasPrev = page > 0;
@@ -138,7 +139,7 @@ public final class LeaderboardDialog {
         Component myLabel = Component.textOfChildren(
                 inlineHead(viewer.getUniqueId(), viewer.getName(), mine == null ? null : mine.skinUrl),
                 t(" My Position", LB_TITLE),
-                myPos > 0 ? bold(" #" + myPos, LB_TITLE) : Component.empty());
+                myPos > 0 ? Component.textOfChildren(t(" #", LB_TITLE), bold(String.valueOf(myPos), LB_TITLE)) : Component.empty());
         buttons.add(ActionButton.create(myLabel, t("Open your own profile", GRAY), buttonWidth,
                 click((view, p) -> myPosition(p))));
         buttons.add(ActionButton.create(t("⚔ Find Player", LB_TITLE), t("Search for the name typed above", GRAY), buttonWidth,
