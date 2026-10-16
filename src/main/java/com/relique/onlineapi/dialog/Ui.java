@@ -45,6 +45,14 @@ final class Ui {
     static final TextColor GRAY = NamedTextColor.GRAY;
     static final TextColor DARK_GRAY = NamedTextColor.DARK_GRAY;
 
+    // Leaderboard-only colours (sampled from the reference dialog). The profile keeps the colours above.
+    static final TextColor LB_TITLE = TextColor.color(0xFCBF5B);
+    static final TextColor LB_SUB = TextColor.color(0xFCE2B2);
+    static final TextColor LB_RULE = TextColor.color(0xC8C8C8);
+    static final TextColor RANK_1 = TextColor.color(0xFCD249);
+    static final TextColor RANK_2 = TextColor.color(0xD9DEE5);
+    static final TextColor RANK_3 = TextColor.color(0xCD7F32);
+
     static final String NA = "N/A";
 
     private Ui() {}
@@ -64,8 +72,12 @@ final class Ui {
 
     /** Thin horizontal rule like the reference: struck-through spaces, ~70% of the given pixel width. */
     static Component divider(int widthPx) {
+        return divider(widthPx, BLUE);
+    }
+
+    static Component divider(int widthPx, TextColor color) {
         int spaces = Math.max(10, widthPx * 7 / 40);
-        return Component.text(" ".repeat(spaces), BLUE).decoration(TextDecoration.STRIKETHROUGH, true)
+        return Component.text(" ".repeat(spaces), color).decoration(TextDecoration.STRIKETHROUGH, true)
                 .decoration(TextDecoration.ITALIC, false);
     }
 
