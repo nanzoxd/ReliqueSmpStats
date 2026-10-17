@@ -1,59 +1,59 @@
-# Port the mini HTTP API listens on. Make sure this port is open/forwarded
-# on your host, and NOT the same as your Minecraft server port.
-port: 8123
-
-# Optional. If set, requests must include header:  X-Api-Key: <this value>
-# Leave blank to allow open access (fine if the port is only reachable
-# through a reverse proxy you control).
-api-key: ""
-
-# How often (in minutes) stats are flushed to disk automatically.
-# They are also always saved on server shutdown.
-autosave-interval-minutes: 5
-
-elo:
-  # Every new player starts here (950 = Combat Novice).
-  starting: 950
-  # Elo can never drop below this number (700 = Rookie). Players start
-  # at Combat Novice and can be knocked down to Rookie, but no lower.
-  floor: 700
-  # K-factor: how many rating points can move per kill. Higher = faster,
-  # more volatile swings. Lower = slower, steadier ranking.
-  k: 24
-  # Anti-farm safeguard: killing the *same* opponent again (in either
-  # direction) within this many seconds won't move Elo a second time,
-  # so two players can't trade kills back and forth to inflate rating.
-  same-pair-cooldown-seconds: 300
-  # "Combat Grandmaster" isn't a fixed Elo number — it's reserved for only
-  # this many of the very top players (by Elo, among those above the
-  # Combat Master threshold). Everyone else caps out at Combat Master.
-  grandmaster-slots: 2
-  # Playtime also earns Elo — this many points per full hour played,
-  # paid out automatically as hours complete. Set to 0 to disable.
-  playtime-reward-per-hour: 5
-
-# /api/ranked - the website's "Ranked" tab. Reads the RankedSMPX plugin's own
-# config.yml / custom.yml / database, so total-ranks (30, 50, ...), hearts,
-# multipliers, prefixes etc. follow whatever you set there.
-ranked:
-  # Folder/plugin name of the ranked plugin on your server.
-  plugin-name: "RankedSMPX"
-  # A rank holder who has not been online for this many hours is shown as
-  # "Inactive" on the website, with a live timer. 48 = 2 days.
-  inactive-after-hours: 48
-  # How long (seconds) the answer is cached, so the site can't hammer the
-  # database/config files. Config edits show up within this time.
-  cache-seconds: 10
-
-# In-game leaderboard + player profile dialogs (/leaderboard, /pvpprofile). Needs Paper 1.21.6+.
-dialogs:
-  # Players per leaderboard page. Two columns, so keep it even (12 = 6 rows).
-  players-per-page: 12
-  # Width in pixels of each leaderboard button.
-  button-width: 180
-  # Width in pixels of the text blocks on the profile page.
-  profile-width: 320
-  # Time zone for dates and times, e.g. "Asia/Kolkata". Blank = the server's time zone.
-  timezone: ""
-  # Players with this permission get a [PREMIUM] badge on their profile. Blank = no badge.
-  premium-permission: ""
+# EventCore main configuration. Everything here is also editable in-game: /eventcore gui
+# Gradient palette used by the <g> tag in every message, title and bossbar.
+palette:            # gold palette
+  - "#d8b04a"
+  - "#e8c670"
+  - "#f1d58f"
+  - "#f7e2ad"
+  - "#fff0cc"
+# Bossbars use this gradient (<bb> tag): "Lootdrop Falling | 10 20 30"
+bossbar-gradient: ["#2FD0CD", "#C5F2F1", "#2FD0CD"]
+# GUI colours (same theme as the Teams plugin)
+theme:
+  main: "#F47F6A"
+  soft: "#FAB2A0"
+  good: "#2EFF2E"
+  bad: "#FF2E4A"
+  warn: "#FFFF5C"
+  info: "#00C3FF"
+style:
+  small-caps: true      # convert template text to small caps (placeholder values are left alone)
+  strip-bold: true      # never render bold
+  title-times:          # ticks
+    fade-in: 10
+    stay: 70
+    fade-out: 20
+# Timezone for scheduled events (IANA name, e.g. Europe/Berlin, America/New_York)
+timezone: "UTC"
+max-concurrent-events: 2
+# Groups of events that can never run together (ids or aliases)
+incompatible-events:
+  - [anonymous, glow]
+sounds:
+  # default sound for chat broadcasts (a message can override it with its own sound section)
+  broadcast: {sound: "block.note_block.chime", volume: 0.6, pitch: 1.4}
+particles:
+  compute-async: false  # compute particle offsets off-thread (spawn is always on the region thread)
+  force: false          # show particles to players beyond normal range
+# Discord webhook notifications (mini events, lootdrops, rituals). Set enabled: true and paste the webhook URL.
+discord:
+  enabled: false
+  webhook-url: ""
+  username: "EventCore"
+  avatar-url: ""
+  server-name: "My Server"
+  mention: ""              # pinged on event start / lootdrop landed / ritual start, e.g. "<@&123456789>" or "@everyone"
+  notify:
+    event-start: true
+    schedule-warning: true
+    airdrop-landed: true
+    airdrop-opened: true
+    ritual-start: true
+    ritual-complete: true
+    ritual-stop: true
+  colors:
+    start: "#2EFF2E"
+    end: "#FF2E4A"
+    warn: "#FFFF5C"
+    airdrop: "#d8b04a"
+    ritual: "#F47F6A"
