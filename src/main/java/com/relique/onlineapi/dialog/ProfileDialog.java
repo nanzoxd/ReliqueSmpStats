@@ -14,6 +14,7 @@ import io.papermc.paper.registry.data.dialog.body.DialogBody;
 import io.papermc.paper.registry.data.dialog.type.DialogType;
 import net.kyori.adventure.audience.Audience;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.JoinConfiguration;
 import net.kyori.adventure.text.event.ClickCallback;
 import net.kyori.adventure.text.format.TextColor;
 import org.bukkit.Bukkit;
@@ -82,81 +83,80 @@ public final class ProfileDialog {
         String name = s.name == null ? "Unknown" : s.name;
         List<DialogBody> body = new ArrayList<>();
 
-        // ------------------------------------------------------------ header
+        // title: [head] Name, like the reference's icon + bold name
+        Component title = Component.textOfChildren(inlineHead(s.uuid, name, s.skinUrl), t(" ", WHITE), bold(name, GOLD));
+
+        // status line under the title
         List<Component> sub = new ArrayList<>();
         sub.add(t(online ? "Online" : "Offline", online ? GREEN : GRAY));
-        if (smpRank > 0) sub.add(t("SMP Rank #" + smpRank, GOLD));
+        if (smpRank > 0) sub.add(t("SMP Rank #" + smpRank, SKY));
+        if (s.premium) sub.add(t("[PREMIUM]", GOLD));
         Component subLine = Component.empty();
         for (int i = 0; i < sub.size(); i++) {
             if (i > 0) subLine = subLine.append(t(" · ", BLUE));
             subLine = subLine.append(sub.get(i));
         }
-        Component nameLine = bold(name, WHITE);
-        if (s.premium) nameLine = nameLine.append(t("  [PREMIUM]", GOLD));
-        Component headerText = Component.textOfChildren(nameLine, Component.newline(), subLine);
-        body.add(DialogBody.item(headItem(s.uuid, name, s.skinUrl),
-                DialogBody.plainMessage(headerText, bodyWidth - 40), false, false, 32, 32));
+        body.add(line(subLine));
+        body.add(rule());
 
-        // ------------------------------------------------------------ summary block
-        body.add(line(kvLine("Rating", num(Math.round(s.elo)), GOLD)
-                .append(t("  (Peak: " + num(Math.round(Math.max(s.peakElo, s.elo))) + ")", GRAY))));
-        body.add(line(Component.textOfChildren(
-                t("Record: ", GRAY), t(wins + "W", GREEN), t(" / ", GRAY), t(losses + "L", RED),
-                t("  (" + winRate + " WR)", GRAY))));
-        body.add(line(kvLine("Position", position > 0 ? "#" + position : NA, GOLD)));
-        body.add(line(streakLine(s)));
+        // rating / record / position / streak: one block
+        body.add(line(lines(
+                kvLine("Rating", num(Math.round(s.elo)), GOLD)
+                        .append(t(" (Peak: " + num(Math.round(Math.max(s.peakElo, s.elo))) + ")", ORANGE)),
+                Component.textOfChildren(t("Record: ", GRAY), t(wins + "W", GREEN), t(" / ", GRAY),
+                        t(losses + "L", RED), t(" (" + winRate + " WR)", GRAY)),
+                kvLine("Position", position > 0 ? "#" + position : NA, GOLD),
+                streakLine(s))));
+        body.add(rule());
 
-        // ------------------------------------------------------------ statistics
-        body.add(line(divider()));
-        body.add(line(bold("PLAYER STATISTICS", PURPLE)));
-        body.add(line(Component.textOfChildren(
-                kvLine("Kills", num(s.kills), WHITE), sep(),
-                kvLine("Deaths", num(s.deaths), WHITE), sep(),
-                kvLine("K/D", String.format("%.2f", s.kd()), WHITE))));
-        body.add(line(Component.textOfChildren(
-                kvLine("Playtime", playtime(playtime), WHITE), sep(),
-                kvLine("Blocks Mined", num(s.blocksMined), WHITE))));
-        body.add(line(Component.textOfChildren(
-                kvLine("SMP Rank", smpRank > 0 ? "#" + smpRank : NA, smpRank > 0 ? GOLD : GRAY), sep(),
-                kvLine("First Joined", date(firstJoined), WHITE))));
-        body.add(line(kvLine("Last Seen", lastSeen, online ? GREEN : WHITE)));
+        // statistics: heading + rows in one block
+        body.add(line(lines(
+                bold("PLAYER STATISTICS", PURPLE),
+                Component.textOfChildren(kvLine("Kills", num(s.kills), WHITE), sep(),
+                        kvLine("Deaths", num(s.deaths), WHITE), sep(),
+                        kvLine("K/D", String.format("%.2f", s.kd()), WHITE)),
+                Component.textOfChildren(kvLine("Playtime", playtime(playtime), WHITE), sep(),
+                        kvLine("Blocks Mined", num(s.blocksMined), WHITE)),
+                Component.textOfChildren(
+                        kvLine("SMP Rank", smpRank > 0 ? "#" + smpRank : NA, smpRank > 0 ? SKY : GRAY), sep(),
+                        kvLine("First Joined", date(firstJoined), WHITE)),
+                kvLine("Last Seen", lastSeen, online ? GREEN : WHITE))));
+        body.add(rule());
 
-        // ------------------------------------------------------------ best tier
-        body.add(line(divider()));
-        body.add(line(bold("BEST TIER", PURPLE)));
+        // best tier
+        List<Component> tier = new ArrayList<>();
+        tier.add(bold("BEST TIER", PURPLE));
         if (s.tierBest == null || s.tierBest.isBlank()) {
-            body.add(line(t("Not ranked", GRAY)));
+            tier.add(t("Not ranked", GRAY));
         } else {
-            body.add(line(t(orNa(s.tierPlatform), WHITE)));
-            body.add(line(Component.textOfChildren(
-                    kvLine("Best Tier", s.tierBest, GOLD), sep(),
-                    kvLine("Gamemode", orNa(s.tierMode), WHITE))));
-            if (s.tierRank != null && !s.tierRank.isBlank()) {
-                body.add(line(kvLine("Tier Rank", s.tierRank, WHITE)));
-            }
+            tier.add(t(orNa(s.tierPlatform), WHITE));
+            tier.add(Component.textOfChildren(kvLine("Best Tier", s.tierBest, GOLD), sep(),
+                    kvLine("Gamemode", orNa(s.tierMode), YELLOW)));
+            if (s.tierRank != null && !s.tierRank.isBlank()) tier.add(kvLine("Tier Rank", s.tierRank, WHITE));
         }
+        body.add(line(Component.join(JoinConfiguration.newlines(), tier)));
+        body.add(rule());
 
-        // ------------------------------------------------------------ recent fight (exactly one)
-        body.add(line(divider()));
-        body.add(line(bold("RECENT FIGHT", PURPLE)));
+        // recent fight (exactly one)
+        List<Component> fight = new ArrayList<>();
+        fight.add(bold("RECENT FIGHT", PURPLE));
         if (s.fights.isEmpty()) {
-            body.add(line(t("No fights recorded", GRAY)));
+            fight.add(t("No fights recorded", GRAY));
         } else {
             Fight f = s.fights.get(0); // newest first
             PlayerStats opp = stats.findByName(f.opponent);
-            ItemHead head = new ItemHead(opp == null ? null : opp.uuid, f.opponent, opp == null ? null : opp.skinUrl);
-
             TextColor resultColor = f.win ? GREEN : RED;
             String change = f.eloChange > 0 ? "+" + f.eloChange : String.valueOf(f.eloChange);
             TextColor changeColor = f.eloChange > 0 ? GREEN : (f.eloChange < 0 ? RED : GRAY);
-            Component text = Component.textOfChildren(
-                    t(f.opponent, WHITE), t("   " + (f.win ? "WIN" : "LOSS"), resultColor), Component.newline(),
+            fight.add(Component.textOfChildren(
+                    inlineHead(opp == null ? null : opp.uuid, f.opponent, opp == null ? null : opp.skinUrl),
+                    t(" " + f.opponent, WHITE), t("   " + (f.win ? "WIN" : "LOSS"), resultColor)));
+            fight.add(Component.textOfChildren(
                     t(f.opponentElo >= 0 ? num(f.opponentElo) + " Elo" : NA + " Elo", GOLD),
-                    t("   " + change + " Elo", changeColor), Component.newline(),
-                    t(dateTime(f.time), GRAY));
-            body.add(DialogBody.item(headItem(head.uuid, head.name, head.skin),
-                    DialogBody.plainMessage(text, bodyWidth - 40), false, false, 32, 32));
+                    t("   " + change + " Elo", changeColor)));
+            fight.add(t(dateTime(f.time), GRAY));
         }
+        body.add(line(Component.join(JoinConfiguration.newlines(), fight)));
 
         // ------------------------------------------------------------ bottom buttons (only these two)
         ActionButton backBtn = ActionButton.create(t("← Back to Leaderboard", WHITE), null, 150,
@@ -164,7 +164,7 @@ public final class ProfileDialog {
         ActionButton closeBtn = ActionButton.create(t("✖ Close", CLOSE_RED), null, 150, null);
 
         Dialog dialog = Dialog.create(b -> b.empty()
-                .base(DialogBase.builder(bold(name.toUpperCase(), PURPLE))
+                .base(DialogBase.builder(title)
                         .canCloseWithEscape(true)
                         .body(body)
                         .build())
@@ -174,7 +174,9 @@ public final class ProfileDialog {
 
     // ------------------------------------------------------------ helpers
 
-    private record ItemHead(UUID uuid, String name, String skin) {}
+    private DialogBody rule() {
+        return DialogBody.plainMessage(divider(bodyWidth), bodyWidth);
+    }
 
     private DialogBody line(Component c) {
         return DialogBody.plainMessage(c, bodyWidth);

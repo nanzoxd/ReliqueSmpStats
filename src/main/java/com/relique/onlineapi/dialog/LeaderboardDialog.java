@@ -58,7 +58,7 @@ public final class LeaderboardDialog {
         this.buttonWidth = Math.max(120, Math.min(300, plugin.getConfig().getInt("dialogs.button-width", 180)));
     }
 
-    private record Row(int position, UUID uuid, String name, long elo) {}
+    private record Row(int position, UUID uuid, String name, long elo, String skin) {}
 
     public void open(Player viewer, State st) {
         List<PlayerStats> all = stats.leaderboard();
@@ -69,7 +69,7 @@ public final class LeaderboardDialog {
             PlayerStats s = all.get(i);
             String n = s.name == null ? "Unknown" : s.name;
             if (q.isEmpty() || n.toLowerCase(Locale.ROOT).contains(q)) {
-                rows.add(new Row(i + 1, s.uuid, n, Math.round(s.elo)));
+                rows.add(new Row(i + 1, s.uuid, n, Math.round(s.elo), s.skinUrl));
             }
         }
 
@@ -79,24 +79,27 @@ public final class LeaderboardDialog {
         int to = Math.min(rows.size(), from + perPage);
         final String query = st.query();
 
-        // ---- header text
-        List<DialogBody> body = new ArrayList<>();
-        if (rows.isEmpty()) {
-            body.add(DialogBody.plainMessage(t("No players found", RED)));
-        } else {
-            body.add(DialogBody.plainMessage(t("#" + rows.get(from).position() + " - #" + rows.get(to - 1).position(), WHITE)));
-        }
-        body.add(DialogBody.plainMessage(t("Players ranked by Elo", GRAY)));
-        body.add(DialogBody.plainMessage(Component.textOfChildren(
-                t("Page ", GRAY), t(String.valueOf(page + 1), WHITE), t(" / ", GRAY), t(String.valueOf(pages), WHITE))));
+        // ---- header: ONE text block (title is the dialog title above it); the divider is the last
+        // line of the same block so there is no empty gap before it.
+        int fullWidth = buttonWidth * 2 + 10;
+        List<Component> head = new ArrayList<>();
+        head.add(bold("ELO LEADERBOARD", LB_TITLE));
+        if (rows.isEmpty()) head.add(t("No players found", RED));
+        else head.add(t("#" + rows.get(from).position() + " - #" + rows.get(to - 1).position(), LB_SUB));
+        head.add(t("Players ranked by Elo", WHITE));
+        head.add(t("See where you stand on the server", WHITE));
+        head.add(t("Page " + (page + 1) + " / " + pages, GRAY));
         if (!query.isEmpty()) {
-            body.add(DialogBody.plainMessage(Component.textOfChildren(
-                    t("Search: ", GRAY), t(query, GOLD), t("  (" + rows.size() + " found)", GRAY))));
+            head.add(Component.textOfChildren(
+                    t("Search: ", GRAY), t(query, LB_TITLE), t("  (" + rows.size() + " found)", GRAY)));
         }
+        head.add(divider(fullWidth, LB_RULE));
+        List<DialogBody> body = new ArrayList<>();
+        body.add(DialogBody.plainMessage(Component.join(net.kyori.adventure.text.JoinConfiguration.newlines(), head), fullWidth));
 
         // ---- search box
         List<DialogInput> inputs = List.of(
-                DialogInput.text("query", t("Find a player", PURPLE))
+                DialogInput.text("query", t("Find a player", LB_SUB))
                         .width(buttonWidth * 2 + 10)
                         .initial(query)
                         .maxLength(16)
@@ -107,17 +110,19 @@ public final class LeaderboardDialog {
         for (int i = from; i < to; i++) {
             Row r = rows.get(i);
             Component label = Component.textOfChildren(
-                    t("#" + r.position() + " ", GOLD),
-                    inlineHead(r.uuid(), r.name()),
+                    bold("#" + r.position() + " ", rankColor(r.position())),
+                    inlineHead(r.uuid(), r.name(), r.skin()),
                     t(" " + r.name(), WHITE),
-                    t("  " + num(r.elo()), GOLD));
+                    t("  " + num(r.elo()), LB_TITLE));
             State back = new State(page, query);
             buttons.add(ActionButton.create(label, t("View " + r.name() + "'s stats", GRAY), buttonWidth,
                     click((view, p) -> profile.open(p, r.uuid(), back))));
         }
-        // an odd last row would leave a hole in the 2-column grid, so keep controls on a fresh row
-        if (buttons.size() % 2 == 1) {
-            buttons.add(ActionButton.create(Component.empty(), null, buttonWidth, null));
+        // Fill the page with empty slots so the dialog is always full height. A short dialog is
+        // centred by the client, which leaves a big gap under the icon; a full one sits tight.
+        for (int i = to; i < from + perPage; i++) {
+            buttons.add(ActionButton.create(Component.textOfChildren(
+                    bold("#" + (i + 1) + " ", DARK_GRAY), t("-", DARK_GRAY)), null, buttonWidth, null));
         }
 
         boolean hasPrev = page > 0;
@@ -129,25 +134,35 @@ public final class LeaderboardDialog {
                 hasNext ? t("Next Page →", WHITE) : t("Next Page →", DARK_GRAY), null, buttonWidth,
                 hasNext ? click((view, p) -> open(p, new State(page + 1, query))) : null));
         int myPos = stats.positionOf(viewer.getUniqueId());
+        PlayerStats mine = stats.find(viewer.getUniqueId());
         Component myLabel = Component.textOfChildren(
-                inlineHead(viewer.getUniqueId(), viewer.getName()),
-                t(" My Position", PURPLE),
-                myPos > 0 ? t(" #" + myPos, GOLD) : Component.empty());
+                inlineHead(viewer.getUniqueId(), viewer.getName(), mine == null ? null : mine.skinUrl),
+                t(" My Position", LB_TITLE),
+                myPos > 0 ? bold(" #" + myPos, LB_TITLE) : Component.empty());
         buttons.add(ActionButton.create(myLabel, t("Open your own profile", GRAY), buttonWidth,
                 click((view, p) -> myPosition(p))));
-        buttons.add(ActionButton.create(t("⚔ Find Player", PURPLE), t("Search for the name typed above", GRAY), buttonWidth,
+        buttons.add(ActionButton.create(t("⚔ Find Player", LB_TITLE), t("Search for the name typed above", GRAY), buttonWidth,
                 click((view, p) -> find(p, view.getText("query")))));
 
         ActionButton close = ActionButton.create(t("✖ Close", CLOSE_RED), null, buttonWidth, null);
 
         Dialog dialog = Dialog.create(b -> b.empty()
-                .base(DialogBase.builder(bold("ELO LEADERBOARD", PURPLE))
+                .base(DialogBase.builder(Component.empty())
                         .canCloseWithEscape(true)
                         .body(body)
                         .inputs(inputs)
                         .build())
                 .type(DialogType.multiAction(buttons, close, 2)));
         viewer.showDialog(dialog);
+    }
+
+    private static net.kyori.adventure.text.format.TextColor rankColor(int position) {
+        return switch (position) {
+            case 1 -> RANK_1;
+            case 2 -> RANK_2;
+            case 3 -> RANK_3;
+            default -> LB_TITLE;
+        };
     }
 
     // ------------------------------------------------------------ actions
