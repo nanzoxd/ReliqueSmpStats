@@ -1,0 +1,37 @@
+name: ReliqueOnlineAPI
+version: ${project.version}
+main: com.relique.onlineapi.OnlineApiPlugin
+api-version: "1.21"
+author: Relique
+description: Exposes online players, kills, deaths, K/D, blocks mined, playtime, a competitive Elo rating (kills + playtime rewards), (if installed) BetterTeams data and (if installed) the RankedSMPX rank list + config as JSON for the website. Also provides an in-game Elo leaderboard + player profile (Dialog API) and PlaceholderAPI placeholders.
+softdepend: [BetterTeams, RankedSMPX, PlaceholderAPI]
+commands:
+  stats:
+    description: Reset or revert Relique stats (asks for confirmation, backs up first)
+    usage: /stats reset all | /stats reset <player> | /stats revert [number] | /stats backups | /stats confirm
+    aliases: [statsreset]
+    permission: reliqueapi.reset
+  leaderboard:
+    description: Open the Elo leaderboard
+    usage: /leaderboard [search]
+    aliases: [lb, elotop]
+    permission: reliqueapi.leaderboard
+  pvpprofile:
+    description: Open a player's PvP profile
+    usage: /pvpprofile [player]
+    aliases: [pvpstats, elostats]
+    permission: reliqueapi.leaderboard
+  besttier:
+    description: Set or clear the best PvP tier shown on a profile
+    usage: /besttier <player> <platform> <tier> <gamemode> [rank] | /besttier <player> clear
+    permission: reliqueapi.tier
+permissions:
+  reliqueapi.reset:
+    description: Allows resetting and reverting stats
+    default: op
+  reliqueapi.leaderboard:
+    description: Allows opening the leaderboard and player profiles
+    default: true
+  reliqueapi.tier:
+    description: Allows setting the best tier shown on profiles
+    default: op

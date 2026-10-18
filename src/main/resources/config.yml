@@ -1,0 +1,63 @@
+# Port the mini HTTP API listens on. Make sure this port is open/forwarded
+# on your host, and NOT the same as your Minecraft server port.
+port: 8123
+
+# Optional. If set, requests must include header:  X-Api-Key: <this value>
+# Leave blank to allow open access (fine if the port is only reachable
+# through a reverse proxy you control).
+api-key: ""
+
+# How often (in minutes) stats are flushed to disk automatically.
+# They are also always saved on server shutdown.
+autosave-interval-minutes: 5
+
+elo:
+  # Every new player starts here (950 = Combat Novice).
+  starting: 950
+  # Elo can never drop below this number (700 = Rookie). Players start
+  # at Combat Novice and can be knocked down to Rookie, but no lower.
+  floor: 700
+  # Elo moved per kill is always between these two numbers, scaled by the
+  # matchup: beating a much stronger player gives max-change, beating a much
+  # weaker player still gives min-change (never 0). Losing works the same way
+  # in reverse: losing to a weaker player costs max-change, to a stronger one
+  # costs min-change.
+  min-change: 10
+  max-change: 40
+  # Anti-farm safeguard: killing the *same* opponent again (in either
+  # direction) within this many seconds won't move Elo a second time,
+  # so two players can't trade kills back and forth to inflate rating.
+  same-pair-cooldown-seconds: 60
+  # "Combat Grandmaster" isn't a fixed Elo number — it's reserved for only
+  # this many of the very top players (by Elo, among those above the
+  # Combat Master threshold). Everyone else caps out at Combat Master.
+  grandmaster-slots: 2
+  # Playtime also earns Elo — this many points per full hour played,
+  # paid out automatically as hours complete. Set to 0 to disable.
+  playtime-reward-per-hour: 5
+
+# /api/ranked - the website's "Ranked" tab. Reads the RankedSMPX plugin's own
+# config.yml / custom.yml / database, so total-ranks (30, 50, ...), hearts,
+# multipliers, prefixes etc. follow whatever you set there.
+ranked:
+  # Folder/plugin name of the ranked plugin on your server.
+  plugin-name: "RankedSMPX"
+  # A rank holder who has not been online for this many hours is shown as
+  # "Inactive" on the website, with a live timer. 48 = 2 days.
+  inactive-after-hours: 48
+  # How long (seconds) the answer is cached, so the site can't hammer the
+  # database/config files. Config edits show up within this time.
+  cache-seconds: 10
+
+# In-game leaderboard + player profile dialogs (/leaderboard, /pvpprofile). Needs Paper 1.21.6+.
+dialogs:
+  # Players per leaderboard page. Two columns, so keep it even (12 = 6 rows).
+  players-per-page: 12
+  # Width in pixels of each leaderboard button.
+  button-width: 180
+  # Width in pixels of the text blocks on the profile page.
+  profile-width: 320
+  # Time zone for dates and times, e.g. "Asia/Kolkata". Blank = the server's time zone.
+  timezone: ""
+  # Players with this permission get a [PREMIUM] badge on their profile. Blank = no badge.
+  premium-permission: ""
