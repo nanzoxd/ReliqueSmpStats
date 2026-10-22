@@ -20,6 +20,7 @@ public class OnlineApiPlugin extends JavaPlugin {
     private HttpServer server;
     private StatsManager statsManager;
     private BukkitTask autosaveTask;
+    private HealthManager health;
 
     /** Used by other plugins (EventCore) to read/set the Elo gain multiplier. */
     public StatsManager getStatsManager() { return statsManager; }
@@ -35,6 +36,10 @@ public class OnlineApiPlugin extends JavaPlugin {
             getCommand("stats").setTabCompleter(cmd);
         }
         getServer().getPluginManager().registerEvents(new StatsListener(statsManager, this), this);
+        health = new HealthManager(this);
+        getServer().getPluginManager().registerEvents(health, this);
+        health.start();
+
         ReloadCommand reload = new ReloadCommand(this);
         if (getCommand("reliqueapi") != null) {
             getCommand("reliqueapi").setExecutor(reload);
@@ -61,6 +66,7 @@ public class OnlineApiPlugin extends JavaPlugin {
     public void reloadAll() {
         reloadConfig();
         statsManager.reloadSettings();
+        health.reload();
 
         com.relique.onlineapi.dialog.Dialogs.shutdown();
         com.relique.onlineapi.dialog.Dialogs.init(this, statsManager);
@@ -87,10 +93,11 @@ public class OnlineApiPlugin extends JavaPlugin {
             server.createContext("/api/stats", new StatsHttpHandler(statsManager, apiKey));
             server.createContext("/api/events", new EventsHttpHandler(statsManager, apiKey));
             server.createContext("/api/teams", new TeamsHttpHandler(statsManager, apiKey));
+            server.createContext("/api/health", new HealthHttpHandler(health, apiKey));
             server.setExecutor(null); // small endpoints, default executor is plenty
             server.start();
             getLogger().info("API listening on port " + port
-                    + " (endpoints: /api/online, /api/stats, /api/events, /api/teams)");
+                    + " (endpoints: /api/online, /api/stats, /api/events, /api/teams, /api/health)");
         } catch (IOException e) {
             getLogger().severe("Could not start API HTTP server on port " + port + ": " + e.getMessage());
         }
@@ -109,6 +116,7 @@ public class OnlineApiPlugin extends JavaPlugin {
     public void onDisable() {
         com.relique.onlineapi.dialog.Dialogs.shutdown();
         stopHttpServer();
+        if (health != null) health.stop();
         if (statsManager != null) {
             statsManager.flushSessions();
             statsManager.save();

@@ -49,3 +49,11 @@ dialogs:
   timezone: ""
   # Players with this permission get a [PREMIUM] badge on their profile. Blank = no badge.
   premium-permission: ""
+
+# Server health (the website's "Server Health" page reads /api/health).
+# Samples TPS, MSPT, RAM, CPU, players, chunks and entities, and remembers restarts and downtime.
+# History is saved in health-samples.csv so graphs survive a restart. /reliqueapi reload applies changes.
+health:
+  enabled: true
+  sample-interval-seconds: 30
+  keep-hours: 48

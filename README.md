@@ -105,6 +105,21 @@ as the tie-breaker, the same as Teams' own team top.
 Both stats-style endpoints send `Access-Control-Allow-Origin: *` so your
 website can `fetch()` them directly.
 
+### `GET /api/health`
+Server health history for the website's **Server Health** page. Query params (all optional):
+- `hours` — `1` (default), `6`, `24`, up to `health.keep-hours` (48 by default)
+- `points` — max points per graph (default 240; longer ranges are averaged into buckets)
+
+Returns the latest sample (`current`: TPS, MSPT, RAM, CPU, players, chunks, entities, disk), `server`
+(`started_at` = last restart, `uptime_seconds`), `peak` (this session and all time), `stats` (average,
+lowest and highest for the chosen range), `downtimes` / `last_downtime` (when the server was offline and
+for how long) and `samples` (the graph points).
+
+Samples are taken every `health.sample-interval-seconds` (30) and saved to `health-samples.csv`, so graphs
+survive restarts. When the server starts, the plugin compares now with the last time it was alive and records
+the gap as a downtime. A normal stop is exact, a crash is approximate (to the last sample). A server has no
+GPU, so CPU load is reported instead of a GPU graph.
+
 ## How the Elo system works
 
 - Every player starts at Elo **700** — the base of the ladder (Rookie). Elo
