@@ -138,17 +138,24 @@ public class StatsManager {
     public double getEloGainMultiplier() { return eloGainMultiplier; }
     public void setEloGainMultiplier(double m) { this.eloGainMultiplier = Math.max(0.0, m); }
 
-    private final double startingElo;
-    private final double floorElo;
-    private final double eloMin;   // Elo moved by a kill against a much weaker opponent (base)
-    private final double eloMax;   // Elo moved by a kill against a much stronger opponent (high)
-    private final long pairCooldownMillis;
-    private final int grandmasterSlots;
-    private final double playtimeEloPerHour;
+    // Volatile + non-final so /reliqueapi reload can change them without a restart.
+    private volatile double startingElo;
+    private volatile double floorElo;
+    private volatile double eloMin;   // Elo moved by a kill against a much weaker opponent (base)
+    private volatile double eloMax;   // Elo moved by a kill against a much stronger opponent (high)
+    private volatile long pairCooldownMillis;
+    private volatile int grandmasterSlots;
+    private volatile double playtimeEloPerHour;
 
     public StatsManager(JavaPlugin plugin) {
         this.plugin = plugin;
         this.file = new File(plugin.getDataFolder(), "stats.yml");
+        reloadSettings();
+        load();
+    }
+
+    /** Re-reads the elo.* section of config.yml. Stored stats are left untouched. */
+    public final void reloadSettings() {
         // New players start at the base of the ladder.
         this.startingElo = plugin.getConfig().getDouble("elo.starting", 950);
         this.floorElo = plugin.getConfig().getDouble("elo.floor", 700);
@@ -159,7 +166,6 @@ public class StatsManager {
         this.pairCooldownMillis = plugin.getConfig().getLong("elo.same-pair-cooldown-seconds", 60) * 1000L;
         this.grandmasterSlots = plugin.getConfig().getInt("elo.grandmaster-slots", 2);
         this.playtimeEloPerHour = plugin.getConfig().getDouble("elo.playtime-reward-per-hour", 5);
-        load();
     }
 
     public synchronized PlayerStats get(UUID uuid, String name) {

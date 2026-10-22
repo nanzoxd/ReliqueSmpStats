@@ -7,6 +7,7 @@ import com.sun.net.httpserver.HttpServer;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.scheduler.BukkitTask;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -18,6 +19,7 @@ public class OnlineApiPlugin extends JavaPlugin {
 
     private HttpServer server;
     private StatsManager statsManager;
+    private BukkitTask autosaveTask;
 
     /** Used by other plugins (EventCore) to read/set the Elo gain multiplier. */
     public StatsManager getStatsManager() { return statsManager; }
@@ -33,6 +35,11 @@ public class OnlineApiPlugin extends JavaPlugin {
             getCommand("stats").setTabCompleter(cmd);
         }
         getServer().getPluginManager().registerEvents(new StatsListener(statsManager, this), this);
+        ReloadCommand reload = new ReloadCommand(this);
+        if (getCommand("reliqueapi") != null) {
+            getCommand("reliqueapi").setExecutor(reload);
+            getCommand("reliqueapi").setTabCompleter(reload);
+        }
         com.relique.onlineapi.dialog.Dialogs.init(this, statsManager);
 
         // Anyone already online when /reload happened should get a session start too.
@@ -42,7 +49,36 @@ public class OnlineApiPlugin extends JavaPlugin {
             if (!premiumPerm.isBlank()) statsManager.setPremium(p.getUniqueId(), p.getName(), p.hasPermission(premiumPerm));
         }
 
-        int port = getConfig().getInt("port", 8123);
+        startHttpServer();
+        scheduleAutosave();
+    }
+
+    /**
+     * Re-reads config.yml and applies it live: Elo settings, dialog settings/placeholders, the
+     * API port + key, and the autosave interval. Stats on disk and in memory are not touched.
+     * Called by /reliqueapi reload (works from the console too).
+     */
+    public void reloadAll() {
+        reloadConfig();
+        statsManager.reloadSettings();
+
+        com.relique.onlineapi.dialog.Dialogs.shutdown();
+        com.relique.onlineapi.dialog.Dialogs.init(this, statsManager);
+
+        stopHttpServer();
+        startHttpServer();
+        scheduleAutosave();
+    }
+
+    private void stopHttpServer() {
+        if (server != null) {
+            server.stop(0);
+            server = null;
+        }
+    }
+
+    private void startHttpServer() {
+        int port = getConfig().getInt("port", 25551);
         String apiKey = getConfig().getString("api-key", "");
 
         try {
@@ -51,17 +87,19 @@ public class OnlineApiPlugin extends JavaPlugin {
             server.createContext("/api/stats", new StatsHttpHandler(statsManager, apiKey));
             server.createContext("/api/events", new EventsHttpHandler(statsManager, apiKey));
             server.createContext("/api/teams", new TeamsHttpHandler(statsManager, apiKey));
-            server.createContext("/api/ranked", new RankedHttpHandler(this, apiKey));
             server.setExecutor(null); // small endpoints, default executor is plenty
             server.start();
             getLogger().info("API listening on port " + port
-                    + " (endpoints: /api/online, /api/stats, /api/events, /api/teams, /api/ranked)");
+                    + " (endpoints: /api/online, /api/stats, /api/events, /api/teams)");
         } catch (IOException e) {
-            getLogger().severe("Could not start API HTTP server: " + e.getMessage());
+            getLogger().severe("Could not start API HTTP server on port " + port + ": " + e.getMessage());
         }
+    }
 
-        long autosaveTicks = getConfig().getLong("autosave-interval-minutes", 5) * 60L * 20L;
-        Bukkit.getScheduler().runTaskTimer(this, () -> {
+    private void scheduleAutosave() {
+        if (autosaveTask != null) autosaveTask.cancel();
+        long autosaveTicks = Math.max(1L, getConfig().getLong("autosave-interval-minutes", 5)) * 60L * 20L;
+        autosaveTask = Bukkit.getScheduler().runTaskTimer(this, () -> {
             statsManager.flushSessions();
             statsManager.save();
         }, autosaveTicks, autosaveTicks);
@@ -70,9 +108,7 @@ public class OnlineApiPlugin extends JavaPlugin {
     @Override
     public void onDisable() {
         com.relique.onlineapi.dialog.Dialogs.shutdown();
-        if (server != null) {
-            server.stop(0);
-        }
+        stopHttpServer();
         if (statsManager != null) {
             statsManager.flushSessions();
             statsManager.save();

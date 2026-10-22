@@ -15,11 +15,8 @@ public final class Dialogs {
     public static void init(OnlineApiPlugin plugin, StatsManager stats) {
         Ui.configureZone(plugin.getConfig().getString("dialogs.timezone", ""));
 
-        RankedLookup ranked = new RankedLookup(plugin);
-        ranked.start();
-
         try {
-            ProfileDialog profile = new ProfileDialog(plugin, stats, ranked);
+            ProfileDialog profile = new ProfileDialog(plugin, stats);
             LeaderboardDialog leaderboard = new LeaderboardDialog(plugin, stats, profile);
             profile.setLeaderboard(leaderboard);
             DialogCommands cmds = new DialogCommands(stats, leaderboard, profile);
@@ -38,7 +35,7 @@ public final class Dialogs {
 
         if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null) {
             try {
-                StatsPlaceholders ph = new StatsPlaceholders(stats, ranked, plugin.getDescription().getVersion());
+                StatsPlaceholders ph = new StatsPlaceholders(stats, plugin.getDescription().getVersion());
                 ph.register();
                 expansion = ph;
                 plugin.getLogger().info("PlaceholderAPI expansion registered (%relique_...%).");

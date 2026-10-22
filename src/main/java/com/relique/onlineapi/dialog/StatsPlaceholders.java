@@ -14,7 +14,7 @@ import java.util.Locale;
  * Per player:   %relique_elo% %relique_peak_elo% %relique_position% %relique_wins% %relique_losses%
  *               %relique_winrate% %relique_kills% %relique_deaths% %relique_kd% %relique_streak%
  *               %relique_best_streak% %relique_playtime% %relique_playtime_hours% %relique_blocks%
- *               %relique_smp_rank% %relique_first_joined% %relique_last_seen% %relique_premium%
+ *               %relique_first_joined% %relique_last_seen% %relique_premium%
  *               %relique_tier_platform% %relique_tier_best% %relique_tier_mode% %relique_tier_rank%
  * Leaderboard:  %relique_top_1_name% %relique_top_1_elo% %relique_top_1_kills% %relique_top_1_kd%
  *               %relique_total_players%
@@ -25,12 +25,10 @@ public final class StatsPlaceholders extends PlaceholderExpansion {
     private static final String NA = "N/A";
 
     private final StatsManager stats;
-    private final RankedLookup ranked;
     private final String version;
 
-    public StatsPlaceholders(StatsManager stats, RankedLookup ranked, String version) {
+    public StatsPlaceholders(StatsManager stats, String version) {
         this.stats = stats;
-        this.ranked = ranked;
         this.version = version;
     }
 
@@ -89,10 +87,6 @@ public final class StatsPlaceholders extends PlaceholderExpansion {
             case "blocks":         return String.valueOf(s.blocksMined);
             case "playtime":       return Ui.playtime(livePlaytime(s));
             case "playtime_hours": return String.valueOf(livePlaytime(s) / 3600);
-            case "smp_rank": {
-                int r = ranked.rankOf(s.uuid);
-                return r > 0 ? String.valueOf(r) : NA;
-            }
             case "first_joined":   return Ui.date(s.firstJoined);
             case "last_seen":      return player.isOnline() ? "Online" : Ui.dateTime(s.lastSeen);
             case "premium":        return s.premium ? "yes" : "no";

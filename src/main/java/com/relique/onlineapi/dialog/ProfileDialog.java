@@ -36,14 +36,12 @@ public final class ProfileDialog {
 
     private final OnlineApiPlugin plugin;
     private final StatsManager stats;
-    private final RankedLookup ranked;
     private LeaderboardDialog leaderboard; // set after construction (the two reference each other)
     private final int bodyWidth;
 
-    public ProfileDialog(OnlineApiPlugin plugin, StatsManager stats, RankedLookup ranked) {
+    public ProfileDialog(OnlineApiPlugin plugin, StatsManager stats) {
         this.plugin = plugin;
         this.stats = stats;
-        this.ranked = ranked;
         this.bodyWidth = Math.max(200, Math.min(400, plugin.getConfig().getInt("dialogs.profile-width", 320)));
     }
 
@@ -60,7 +58,6 @@ public final class ProfileDialog {
 
         // ------------------------------------------------------------ derived values
         boolean online = Bukkit.getPlayer(target) != null;
-        int smpRank = ranked.rankOf(target);
         int position = stats.positionOf(target);
 
         int wins = s.kills;
@@ -89,7 +86,6 @@ public final class ProfileDialog {
         // status line under the title
         List<Component> sub = new ArrayList<>();
         sub.add(t(online ? "Online" : "Offline", online ? GREEN : GRAY));
-        if (smpRank > 0) sub.add(t("SMP Rank #" + smpRank, SKY));
         if (s.premium) sub.add(t("[PREMIUM]", GOLD));
         Component subLine = Component.empty();
         for (int i = 0; i < sub.size(); i++) {
@@ -117,9 +113,7 @@ public final class ProfileDialog {
                         kvLine("K/D", String.format("%.2f", s.kd()), WHITE)),
                 Component.textOfChildren(kvLine("Playtime", playtime(playtime), WHITE), sep(),
                         kvLine("Blocks Mined", num(s.blocksMined), WHITE)),
-                Component.textOfChildren(
-                        kvLine("SMP Rank", smpRank > 0 ? "#" + smpRank : NA, smpRank > 0 ? SKY : GRAY), sep(),
-                        kvLine("First Joined", date(firstJoined), WHITE)),
+                kvLine("First Joined", date(firstJoined), WHITE),
                 kvLine("Last Seen", lastSeen, online ? GREEN : WHITE))));
         body.add(rule());
 

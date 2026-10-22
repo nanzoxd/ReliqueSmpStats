@@ -62,18 +62,35 @@ ever saw that player. Existing players (from before this field existed) get
 backfilled with the moment this update first runs, not a fake old date.
 
 ### `GET /api/teams`
-Live team data read straight from the **BetterTeams** plugin, if it's
-installed and enabled. This endpoint always responds (never 500s) — if
-BetterTeams isn't on the server, or its version doesn't match what this
-plugin expects, you just get `"available": false`.
+The **team top**, read live from the **Teams** plugin (`Teams-1.0.0.jar`), if it's installed and
+enabled. This endpoint always responds (never 500s) — if Teams isn't on the server, or its version
+doesn't match what this plugin expects, you just get `"available": false`.
+
+Every team carries everything Teams' own `/team top` measures a team by: **score, kills, deaths,
+K/D and playtime** (plus level and member count).
+
+Query params (all optional):
+- `sort` — `score` (default), `kills`, `deaths`, `kd`, `playtime`, `members`
+- `order` — `desc` (default) or `asc`
+- `limit` — top N teams only
 
 ```json
 {
   "available": true,
+  "sort": "score",
   "teams": [
     {
+      "position": 1,
       "name": "hesw",
       "tag": "HESW",
+      "level": 2,
+      "limit": 6,
+      "score": 42,
+      "kills": 37,
+      "deaths": 19,
+      "kd": 1.95,
+      "playtime_seconds": 145200,
+      "member_count": 1,
       "members": [
         { "name": "NotmyaltBG", "uuid": "069a79f4-44e9-4726-a5be-fca90e38aaf5", "rank": "OWNER", "online": false }
       ]
@@ -82,7 +99,8 @@ plugin expects, you just get `"available": false`.
 }
 ```
 
-`rank` is one of `OWNER`, `ADMIN`, `DEFAULT` (BetterTeams' own ranks).
+`rank` is one of `OWNER`, `ADMIN`, `DEFAULT` (Teams' own ranks). Default order is score, with kills
+as the tie-breaker, the same as Teams' own team top.
 
 Both stats-style endpoints send `Access-Control-Allow-Origin: *` so your
 website can `fetch()` them directly.
@@ -153,7 +171,7 @@ Needs **Paper 1.21.6+** (built against 1.21.11). Players run:
 
 Clicking a leaderboard row opens that player's profile; **Back to Leaderboard** returns to the same
 page and search. Anything the plugin has no data for shows `N/A` (best tier shows `Not ranked`).
-Wins = PvP kills, Losses = deaths to another player, SMP Rank = the RankedSMPX rank number.
+Wins = PvP kills, Losses = deaths to another player.
 Settings live under `dialogs:` in `config.yml` (page size, widths, time zone, premium permission).
 
 ## PlaceholderAPI placeholders (identifier `relique`)
@@ -161,7 +179,7 @@ Settings live under `dialogs:` in `config.yml` (page size, widths, time zone, pr
 Per player: `%relique_elo%` `%relique_peak_elo%` `%relique_position%` `%relique_wins%` `%relique_losses%`
 `%relique_winrate%` `%relique_kills%` `%relique_deaths%` `%relique_kd%` `%relique_streak%`
 `%relique_best_streak%` `%relique_playtime%` `%relique_playtime_hours%` `%relique_blocks%`
-`%relique_smp_rank%` `%relique_first_joined%` `%relique_last_seen%` `%relique_premium%`
+`%relique_first_joined%` `%relique_last_seen%` `%relique_premium%`
 `%relique_tier_platform%` `%relique_tier_best%` `%relique_tier_mode%` `%relique_tier_rank%`
 
 Leaderboard: `%relique_top_<n>_name%` `%relique_top_<n>_elo%` `%relique_top_<n>_kills%`
@@ -226,6 +244,16 @@ this API (mixed content). Put the port behind HTTPS via a reverse proxy
 (nginx/Caddy + Let's Encrypt) or a tunnel like Cloudflare Tunnel, then send
 me the final `https://` URL (and API key, if set) and I'll wire the site's
 leaderboard up to it.
+
+## Reloading the config (no restart)
+
+| Command | What it does |
+| --- | --- |
+| `/reliqueapi reload` (`/rapi reload`, `/relique reload`) | Re-reads `config.yml` and applies it live. Works from the console. Needs `reliqueapi.reload` (OP by default) |
+
+Applies instantly: Elo settings, dialog settings (page size, widths, time zone, premium permission),
+PlaceholderAPI expansion, the API port and key (the HTTP server restarts), and the autosave interval.
+Stored stats are never touched by a reload. To pick up a new jar you still need a restart.
 
 ## Resetting and reverting stats
 

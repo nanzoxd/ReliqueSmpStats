@@ -1,6 +1,7 @@
 # Port the mini HTTP API listens on. Make sure this port is open/forwarded
-# on your host, and NOT the same as your Minecraft server port.
-port: 8123
+# on your host, and NOT the same as your Minecraft server port (25533).
+# 25551 = the secondary allocation on LordCloud; the website proxies /relique/* to it (vercel.json).
+port: 25551
 
 # Optional. If set, requests must include header:  X-Api-Key: <this value>
 # Leave blank to allow open access (fine if the port is only reachable
@@ -35,19 +36,6 @@ elo:
   # Playtime also earns Elo — this many points per full hour played,
   # paid out automatically as hours complete. Set to 0 to disable.
   playtime-reward-per-hour: 5
-
-# /api/ranked - the website's "Ranked" tab. Reads the RankedSMPX plugin's own
-# config.yml / custom.yml / database, so total-ranks (30, 50, ...), hearts,
-# multipliers, prefixes etc. follow whatever you set there.
-ranked:
-  # Folder/plugin name of the ranked plugin on your server.
-  plugin-name: "RankedSMPX"
-  # A rank holder who has not been online for this many hours is shown as
-  # "Inactive" on the website, with a live timer. 48 = 2 days.
-  inactive-after-hours: 48
-  # How long (seconds) the answer is cached, so the site can't hammer the
-  # database/config files. Config edits show up within this time.
-  cache-seconds: 10
 
 # In-game leaderboard + player profile dialogs (/leaderboard, /pvpprofile). Needs Paper 1.21.6+.
 dialogs:
