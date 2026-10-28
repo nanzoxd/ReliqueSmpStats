@@ -4,7 +4,7 @@ main: com.relique.onlineapi.OnlineApiPlugin
 api-version: "1.21"
 author: Relique
 description: Exposes online players, kills, deaths, K/D, blocks mined, playtime, a competitive Elo rating (kills + playtime rewards), and (if installed) Teams plugin data (team top with score, kills, deaths, K/D and playtime) as JSON for the website. Also provides an in-game Elo leaderboard + player profile (Dialog API) and PlaceholderAPI placeholders.
-softdepend: [Teams, PlaceholderAPI]
+softdepend: [Teams, PlaceholderAPI, NgaRecipes]
 commands:
   stats:
     description: Reset or revert Relique stats (asks for confirmation, backs up first)

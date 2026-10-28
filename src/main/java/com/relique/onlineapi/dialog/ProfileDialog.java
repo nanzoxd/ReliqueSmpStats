@@ -26,7 +26,7 @@ import java.util.UUID;
 
 import static com.relique.onlineapi.dialog.Ui.*;
 
-/** One single-page player profile: header, stats, best tier and exactly one recent fight. */
+/** One single-page player profile: header, stats, best tier (if set) and the 3 most recent fights. */
 public final class ProfileDialog {
 
     private static final ClickCallback.Options CLICK = ClickCallback.Options.builder()
@@ -117,38 +117,40 @@ public final class ProfileDialog {
                 kvLine("Last Seen", lastSeen, online ? GREEN : WHITE))));
         body.add(rule());
 
-        // best tier
-        List<Component> tier = new ArrayList<>();
-        tier.add(bold("BEST TIER", PURPLE));
-        if (s.tierBest == null || s.tierBest.isBlank()) {
-            tier.add(t("Not ranked", GRAY));
-        } else {
+        // best tier (only when the player has one)
+        if (s.tierBest != null && !s.tierBest.isBlank()) {
+            List<Component> tier = new ArrayList<>();
+            tier.add(bold("BEST TIER", PURPLE));
             tier.add(t(orNa(s.tierPlatform), WHITE));
             tier.add(Component.textOfChildren(kvLine("Best Tier", s.tierBest, GOLD), sep(),
                     kvLine("Gamemode", orNa(s.tierMode), YELLOW)));
             if (s.tierRank != null && !s.tierRank.isBlank()) tier.add(kvLine("Tier Rank", s.tierRank, WHITE));
+            body.add(line(Component.join(JoinConfiguration.newlines(), tier)));
+            body.add(rule());
         }
-        body.add(line(Component.join(JoinConfiguration.newlines(), tier)));
-        body.add(rule());
 
-        // recent fight (exactly one)
+        // recent fights (the 3 newest)
         List<Component> fight = new ArrayList<>();
-        fight.add(bold("RECENT FIGHT", PURPLE));
+        fight.add(bold("RECENT FIGHTS", PURPLE));
         if (s.fights.isEmpty()) {
             fight.add(t("No fights recorded", GRAY));
         } else {
-            Fight f = s.fights.get(0); // newest first
-            PlayerStats opp = stats.findByName(f.opponent);
-            TextColor resultColor = f.win ? GREEN : RED;
-            String change = f.eloChange > 0 ? "+" + f.eloChange : String.valueOf(f.eloChange);
-            TextColor changeColor = f.eloChange > 0 ? GREEN : (f.eloChange < 0 ? RED : GRAY);
-            fight.add(Component.textOfChildren(
-                    inlineHead(opp == null ? null : opp.uuid, f.opponent, opp == null ? null : opp.skinUrl),
-                    t(" " + f.opponent, WHITE), t("   " + (f.win ? "WIN" : "LOSS"), resultColor)));
-            fight.add(Component.textOfChildren(
-                    t(f.opponentElo >= 0 ? num(f.opponentElo) + " Elo" : NA + " Elo", GOLD),
-                    t("   " + change + " Elo", changeColor)));
-            fight.add(t(dateTime(f.time), GRAY));
+            int shown = Math.min(3, s.fights.size()); // newest first
+            for (int i = 0; i < shown; i++) {
+                Fight f = s.fights.get(i);
+                PlayerStats opp = stats.findByName(f.opponent);
+                TextColor resultColor = f.win ? GREEN : RED;
+                String change = f.eloChange > 0 ? "+" + f.eloChange : String.valueOf(f.eloChange);
+                TextColor changeColor = f.eloChange > 0 ? GREEN : (f.eloChange < 0 ? RED : GRAY);
+                if (i > 0) fight.add(t(" ", GRAY));
+                fight.add(Component.textOfChildren(
+                        inlineHead(opp == null ? null : opp.uuid, f.opponent, opp == null ? null : opp.skinUrl),
+                        t(" " + f.opponent, WHITE), t("   " + (f.win ? "WIN" : "LOSS"), resultColor)));
+                fight.add(Component.textOfChildren(
+                        t(f.opponentElo >= 0 ? num(f.opponentElo) + " Elo" : NA + " Elo", GOLD),
+                        t("   " + change + " Elo", changeColor),
+                        t("   " + dateTime(f.time), GRAY)));
+            }
         }
         body.add(line(Component.join(JoinConfiguration.newlines(), fight)));
 

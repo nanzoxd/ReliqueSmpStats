@@ -57,3 +57,11 @@ health:
   enabled: true
   sample-interval-seconds: 30
   keep-hours: 48
+
+# Recipes made with the NgaRecipes plugin (/addrecipe, /editrecipe, /delrecipe) are shown on the website's
+# Recipes page. This plugin reads NgaRecipes' own save file, so anything added in-game appears on the site
+# within a few seconds. GET /api/recipes serves them.
+recipes:
+  # Path relative to the server's plugins/ folder (or an absolute path).
+  file: "NgaRecipes/recipes.yml"
+  check-interval-seconds: 5

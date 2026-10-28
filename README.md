@@ -105,6 +105,38 @@ as the tie-breaker, the same as Teams' own team top.
 Both stats-style endpoints send `Access-Control-Allow-Origin: *` so your
 website can `fetch()` them directly.
 
+### `GET /api/recipes`
+Every recipe made with the **NgaRecipes** plugin (`/addrecipe`, `/editrecipe`, `/delrecipe`), in showcase
+order, for the website's Recipes page. This plugin reads NgaRecipes' own save file
+(`plugins/NgaRecipes/recipes.yml`) and re-reads it within a few seconds of any change, so a recipe added
+in-game shows up on the site by itself. No setup beyond having both plugins installed.
+
+```json
+{
+  "available": true,
+  "updated": 1761630000000,
+  "count": 1,
+  "recipes": [
+    {
+      "id": 1,
+      "name": "Golden Apple",
+      "input": {
+        "3": { "id": "gold_ingot", "count": 1 },
+        "4": { "id": "apple", "count": 1 },
+        "5": { "id": "gold_ingot", "count": 1 }
+      },
+      "output": { "id": "golden_apple", "count": 1 }
+    }
+  ]
+}
+```
+
+`input` is keyed by crafting-grid slot `0`-`8` (row by row, top-left = 0); empty slots are left out. Items
+carry `id` (the Minecraft item), `count` and, when set, `name`, `colors` (per-letter hex colours of a
+coloured/gradient name), `lore`, `skin` (player-head texture URL), `customModel`/`model`, `customData`
+and `enchants`. `available` is `false` when NgaRecipes' file doesn't exist yet. Settings: `recipes.file`
+and `recipes.check-interval-seconds` in `config.yml`.
+
 ### `GET /api/health`
 Server health history for the website's **Server Health** page. Query params (all optional):
 - `hours` — `1` (default), `6`, `24`, up to `health.keep-hours` (48 by default)
@@ -181,11 +213,11 @@ Needs **Paper 1.21.6+** (built against 1.21.11). Players run:
 | Command | What it does |
 | --- | --- |
 | `/leaderboard [search]` (`/lb`, `/elotop`) | Elo leaderboard: 12 per page, search box, Previous/Next, My Position, Find Player, Close |
-| `/pvpprofile [player]` (`/pvpstats`) | One-page profile: rating, record, position, streak, stats, best tier, latest fight |
-| `/besttier <player> <platform> <tier> <gamemode> [rank]` | Staff: set the Best PvP Tier shown on a profile (`_` = space). `/besttier <player> clear` removes it |
+| `/pvpprofile [player]` (`/pvpstats`) | One-page profile: rating, record, position, streak, stats, best tier (only if set) and the 3 most recent fights |
+| `/besttier <player> <platform> <tier> <gamemode> [rank]` | Staff: store a Best PvP Tier (`_` = space). Shown on the profile only when set; also available through the `%relique_tier_*%` placeholders |
 
 Clicking a leaderboard row opens that player's profile; **Back to Leaderboard** returns to the same
-page and search. Anything the plugin has no data for shows `N/A` (best tier shows `Not ranked`).
+page and search. Anything the plugin has no data for shows `N/A`.
 Wins = PvP kills, Losses = deaths to another player.
 Settings live under `dialogs:` in `config.yml` (page size, widths, time zone, premium permission).
 
