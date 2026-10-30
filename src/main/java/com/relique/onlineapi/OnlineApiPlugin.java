@@ -22,6 +22,10 @@ public class OnlineApiPlugin extends JavaPlugin {
     private BukkitTask autosaveTask;
     private HealthManager health;
     private RecipesService recipes;
+    private com.relique.onlineapi.dialog.RankedLookup rankedLookup; // null when ranked.enabled is false
+
+    /** RankedSMPX rank cache, or null when ranked.enabled is false. */
+    public com.relique.onlineapi.dialog.RankedLookup getRankedLookup() { return rankedLookup; }
 
     /** Used by other plugins (EventCore) to read/set the Elo gain multiplier. */
     public StatsManager getStatsManager() { return statsManager; }
@@ -41,6 +45,8 @@ public class OnlineApiPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(health, this);
         health.start();
         recipes = new RecipesService(this);
+
+        startRanked();
 
         ReloadCommand reload = new ReloadCommand(this);
         if (getCommand("reliqueapi") != null) {
@@ -70,6 +76,7 @@ public class OnlineApiPlugin extends JavaPlugin {
         reloadConfig();
         statsManager.reloadSettings();
         health.reload();
+        startRanked();
 
         com.relique.onlineapi.dialog.Dialogs.shutdown();
         com.relique.onlineapi.dialog.Dialogs.init(this, statsManager);
@@ -78,6 +85,18 @@ public class OnlineApiPlugin extends JavaPlugin {
         startHttpServer();
         recipes.start();
         scheduleAutosave();
+    }
+
+    /** (Re)starts or stops the RankedSMPX rank cache according to ranked.enabled. */
+    private void startRanked() {
+        if (rankedLookup != null) {
+            rankedLookup.stop();
+            rankedLookup = null;
+        }
+        if (getConfig().getBoolean("ranked.enabled", true)) {
+            rankedLookup = new com.relique.onlineapi.dialog.RankedLookup(this);
+            rankedLookup.start();
+        }
     }
 
     private void stopHttpServer() {
@@ -94,15 +113,18 @@ public class OnlineApiPlugin extends JavaPlugin {
         try {
             server = HttpServer.create(new InetSocketAddress(port), 0);
             server.createContext("/api/online", new OnlineHandler(apiKey));
-            server.createContext("/api/stats", new StatsHttpHandler(statsManager, apiKey));
+            server.createContext("/api/stats", new StatsHttpHandler(statsManager, apiKey, rankedLookup));
             server.createContext("/api/events", new EventsHttpHandler(statsManager, apiKey));
             server.createContext("/api/teams", new TeamsHttpHandler(statsManager, apiKey));
             server.createContext("/api/health", new HealthHttpHandler(health, apiKey));
             server.createContext("/api/recipes", new RecipesHttpHandler(recipes, apiKey));
+            boolean ranked = getConfig().getBoolean("ranked.enabled", true);
+            if (ranked) server.createContext("/api/ranked", new RankedHttpHandler(this, apiKey));
             server.setExecutor(null); // small endpoints, default executor is plenty
             server.start();
             getLogger().info("API listening on port " + port
-                    + " (endpoints: /api/online, /api/stats, /api/events, /api/teams, /api/health, /api/recipes)");
+                    + " (endpoints: /api/online, /api/stats, /api/events, /api/teams, /api/health, /api/recipes"
+                    + (ranked ? ", /api/ranked" : "") + ")");
         } catch (IOException e) {
             getLogger().severe("Could not start API HTTP server on port " + port + ": " + e.getMessage());
         }
@@ -119,6 +141,7 @@ public class OnlineApiPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (rankedLookup != null) rankedLookup.stop();
         com.relique.onlineapi.dialog.Dialogs.shutdown();
         stopHttpServer();
         if (recipes != null) recipes.stop();

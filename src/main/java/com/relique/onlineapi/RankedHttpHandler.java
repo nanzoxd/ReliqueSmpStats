@@ -120,8 +120,17 @@ public class RankedHttpHandler implements HttpHandler {
         FileConfiguration custom = customFile.exists()
                 ? YamlConfiguration.loadConfiguration(customFile) : new YamlConfiguration();
 
-        int total = Math.max(1, Math.min(500, cfg.getInt("season.total-ranks", 20)));
+        // 3.0.x: highest row of ranks.yml; older: season.total-ranks (20 if neither is found)
+        int found = com.relique.onlineapi.dialog.RankedLookup.totalRanks(folder, cfg);
+        int total = Math.max(1, Math.min(500, found == Integer.MAX_VALUE ? 20 : found));
         long inactiveMs = Math.max(1L, plugin.getConfig().getLong("ranked.inactive-after-hours", 48)) * 3600_000L;
+
+        // RankedSMPX's own inactivity rule (season.inactivity): offline too long -> rank freed or rerolled.
+        // When it is enabled there, ITS timer is the one the website shows.
+        ConfigurationSection inact = cfg.getConfigurationSection("season.inactivity");
+        boolean inactEnabled = inact != null && inact.getBoolean("enabled", false);
+        String inactAction = inact == null ? "remove" : inact.getString("action", "remove");
+        if (inactEnabled) inactiveMs = parseDuration(inact.getString("after", "7d"), inactiveMs);
 
         // every "rank number -> value" table in the whole config
         Map<String, Map<Integer, Object>> tables = new LinkedHashMap<>();
@@ -147,6 +156,9 @@ public class RankedHttpHandler implements HttpHandler {
         j.append("\"available\":true");
         j.append(",\"total_ranks\":").append(total);
         j.append(",\"inactive_after_ms\":").append(inactiveMs);
+        j.append(",\"inactivity\":{\"enabled\":").append(inactEnabled)
+                .append(",\"after_ms\":").append(inactiveMs)
+                .append(",\"action\":\"").append(esc(inactAction)).append("\"}");
 
         // season-level switches
         j.append(",\"season\":{")
@@ -214,7 +226,8 @@ public class RankedHttpHandler implements HttpHandler {
 
         // who holds which rank
         j.append(",\"players\":[");
-        List<String> rows = readHolders(cfg, folder, total, inactiveMs);
+        List<String> rows = plugin.getConfig().getBoolean("ranked.show-all-players", true)
+                ? readHolders(cfg, folder, total, inactiveMs) : new ArrayList<>();
         for (int i = 0; i < rows.size(); i++) {
             if (i > 0) j.append(",");
             j.append(rows.get(i));
@@ -250,6 +263,8 @@ public class RankedHttpHandler implements HttpHandler {
                  PreparedStatement ps = c.prepareStatement(sql);
                  ResultSet rs = ps.executeQuery()) {
                 long now = System.currentTimeMillis();
+                java.util.Set<String> exempt = new java.util.HashSet<>();
+                for (String x : cfg.getStringList("season.inactivity.exempt")) exempt.add(x.trim().toLowerCase());
                 while (rs.next()) {
                     int rank = rs.getInt("rank");
                     if (rank < 1 || rank > total) continue; // unranked / stale rows
@@ -266,12 +281,20 @@ public class RankedHttpHandler implements HttpHandler {
                         if (op.getName() != null) name = op.getName();
                     } catch (Throwable ignored) { /* keep DB name, unknown last seen */ }
 
+                    boolean isExempt = exempt.contains(String.valueOf(name).toLowerCase())
+                            || exempt.contains(uuidStr.toLowerCase());
+                    boolean inactive = !online && lastSeen > 0 && now - lastSeen >= inactiveMs;
+                    long expiresAt = (online || lastSeen <= 0 || isExempt) ? 0 : lastSeen + inactiveMs;
+
                     out.add("{\"rank\":" + rank
                             + ",\"name\":\"" + esc(name) + "\""
                             + ",\"uuid\":\"" + esc(uuidStr) + "\""
                             + ",\"online\":" + online
                             + ",\"last_seen\":" + lastSeen
-                            + ",\"rank_since\":" + updated + "}");
+                            + ",\"rank_since\":" + updated
+                            + ",\"inactive\":" + (inactive && !isExempt)
+                            + ",\"exempt\":" + isExempt
+                            + ",\"expires_at\":" + expiresAt + "}");
                 }
             }
         } catch (Throwable t) {
@@ -310,6 +333,24 @@ public class RankedHttpHandler implements HttpHandler {
     }
 
     // ------------------------------------------------------------------ small helpers
+
+    /** "2d", "12h", "1d12h", "30m" -> milliseconds. Falls back to def when it can't be read. */
+    private static long parseDuration(String s, long def) {
+        if (s == null) return def;
+        Matcher m = Pattern.compile("(?i)(\\d+)\\s*([smhdw])").matcher(s);
+        long total = 0;
+        while (m.find()) {
+            long n = Long.parseLong(m.group(1));
+            switch (Character.toLowerCase(m.group(2).charAt(0))) {
+                case 's': total += n * 1000L; break;
+                case 'm': total += n * 60_000L; break;
+                case 'h': total += n * 3600_000L; break;
+                case 'd': total += n * 86_400_000L; break;
+                default:  total += n * 604_800_000L; break;
+            }
+        }
+        return total > 0 ? total : def;
+    }
 
     private static double asDouble(Object o, double def) {
         if (o instanceof Number) return ((Number) o).doubleValue();

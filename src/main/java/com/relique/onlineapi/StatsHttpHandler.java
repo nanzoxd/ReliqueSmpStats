@@ -26,10 +26,12 @@ public class StatsHttpHandler implements HttpHandler {
 
     private final StatsManager stats;
     private final String apiKey;
+    private final com.relique.onlineapi.dialog.RankedLookup ranked; // null = RankedSMPX support off
 
-    public StatsHttpHandler(StatsManager stats, String apiKey) {
+    public StatsHttpHandler(StatsManager stats, String apiKey, com.relique.onlineapi.dialog.RankedLookup ranked) {
         this.stats = stats;
         this.apiKey = apiKey;
+        this.ranked = ranked;
     }
 
     @Override
@@ -84,6 +86,7 @@ public class StatsHttpHandler implements HttpHandler {
                     .append("\"skin\":").append(s.skinUrl == null ? "null" : "\"" + escape(s.skinUrl) + "\"").append(",")
                     .append("\"elo\":").append(Math.round(s.elo)).append(",")
                     .append("\"rank\":\"").append(escape(stats.rankOf(s))).append("\",")
+                    .append(smpRankField(s))
                     .append("\"kills\":").append(s.kills).append(",")
                     .append("\"deaths\":").append(s.deaths).append(",")
                     .append("\"kd\":").append(String.format("%.2f", s.kd())).append(",")
@@ -105,6 +108,13 @@ public class StatsHttpHandler implements HttpHandler {
         json.append("]}");
 
         writeJson(exchange, 200, json.toString());
+    }
+
+    /** The smp_rank JSON field (null when unranked); empty when RankedSMPX support is off. */
+    private String smpRankField(StatsManager.PlayerStats s) {
+        if (ranked == null) return "";
+        int r = ranked.rankOf(s.uuid);
+        return "\"smp_rank\":" + (r > 0 ? String.valueOf(r) : "null") + ",";
     }
 
     private long currentPlaytime(StatsManager.PlayerStats s) {

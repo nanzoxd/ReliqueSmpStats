@@ -19,15 +19,20 @@ public final class Dialogs {
             ProfileDialog profile = new ProfileDialog(plugin, stats);
             LeaderboardDialog leaderboard = new LeaderboardDialog(plugin, stats, profile);
             profile.setLeaderboard(leaderboard);
-            DialogCommands cmds = new DialogCommands(stats, leaderboard, profile);
-            for (String name : new String[]{"leaderboard", "pvpprofile", "besttier"}) {
+            RankedLookup ranked = plugin.getRankedLookup(); // null when ranked.enabled is false
+            RankedPlayersDialog rankedPlayers = (ranked != null
+                    && plugin.getConfig().getBoolean("ranked.show-all-players", true))
+                    ? new RankedPlayersDialog(plugin, stats, ranked, profile) : null;
+            DialogCommands cmds = new DialogCommands(stats, leaderboard, profile, rankedPlayers);
+            for (String name : new String[]{"leaderboard", "pvpprofile", "besttier", "rankedplayers"}) {
                 PluginCommand c = plugin.getCommand(name);
                 if (c != null) {
                     c.setExecutor(cmds);
                     c.setTabCompleter(cmds);
                 }
             }
-            plugin.getLogger().info("Leaderboard dialogs ready (/leaderboard, /pvpprofile)."
+            plugin.getLogger().info("Leaderboard dialogs ready (/leaderboard, /pvpprofile"
+                    + (rankedPlayers != null ? ", /rankedplayers" : "") + ")."
                     + (Ui.INLINE_HEADS ? "" : " Inline heads unavailable on this server version."));
         } catch (Throwable t) {
             plugin.getLogger().warning("Dialog API is not available (needs Paper 1.21.6 or newer): " + t);
@@ -35,7 +40,7 @@ public final class Dialogs {
 
         if (Bukkit.getPluginManager().getPlugin("PlaceholderAPI") != null) {
             try {
-                StatsPlaceholders ph = new StatsPlaceholders(stats, plugin.getDescription().getVersion());
+                StatsPlaceholders ph = new StatsPlaceholders(stats, plugin.getDescription().getVersion(), plugin.getRankedLookup());
                 ph.register();
                 expansion = ph;
                 plugin.getLogger().info("PlaceholderAPI expansion registered (%relique_...%).");

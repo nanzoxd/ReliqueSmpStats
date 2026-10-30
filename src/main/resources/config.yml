@@ -65,3 +65,19 @@ recipes:
   # Path relative to the server's plugins/ folder (or an absolute path).
   file: "NgaRecipes/recipes.yml"
   check-interval-seconds: 5
+
+# RankedSMPX support. Reads RankedSMPX's own config.yml / ranks.yml and its database (SQLite or MySQL),
+# so nothing needs to be set up on its side. /reliqueapi reload applies changes.
+ranked:
+  # Master switch. true  = RankedSMPX ranks are shown (profile, /api/stats, /api/ranked, placeholders).
+  #                false = everything below is off and the database is never read.
+  enabled: true
+  # Show EVERY ranked player on the server (online or offline) in /rankedplayers and in the
+  # "players" list of GET /api/ranked. Only used when enabled is true.
+  show-all-players: true
+  # Folder name of the RankedSMPX plugin, if you renamed it.
+  plugin-name: "RankedSMPX"
+  # How often (seconds) the ranks are re-read from the RankedSMPX database.
+  cache-seconds: 10
+  # /api/ranked marks a ranked player as inactive after this many hours offline.
+  inactive-after-hours: 48

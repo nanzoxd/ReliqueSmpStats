@@ -26,6 +26,11 @@ commands:
     usage: /reliqueapi reload
     aliases: [rapi, relique]
     permission: reliqueapi.reload
+  rankedplayers:
+    description: Open the list of every RankedSMPX ranked player (needs ranked.enabled in config.yml)
+    usage: /rankedplayers
+    aliases: [rankedlist, smpranks]
+    permission: reliqueapi.ranked
   besttier:
     description: Set or clear the best PvP tier shown on a profile
     usage: /besttier <player> <platform> <tier> <gamemode> [rank] | /besttier <player> clear
@@ -36,6 +41,9 @@ permissions:
     default: op
   reliqueapi.leaderboard:
     description: Allows opening the leaderboard and player profiles
+    default: true
+  reliqueapi.ranked:
+    description: Allows opening the ranked players list
     default: true
   reliqueapi.reload:
     description: Allows reloading config.yml with /reliqueapi reload

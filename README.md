@@ -20,6 +20,27 @@ status ping).
 }
 ```
 
+### RankedSMPX support (`ranked:` in config.yml)
+Reads RankedSMPX's own `config.yml`, `ranks.yml` and database (SQLite or MySQL) — nothing to set up on its side.
+
+```yaml
+ranked:
+  enabled: true           # false = all RankedSMPX features off, database never read
+  show-all-players: true  # false = no /rankedplayers list and no "players" in /api/ranked
+```
+
+When `enabled: true`:
+- `/rankedplayers` (aliases `/rankedlist`, `/smpranks`) opens a paged list of **every** ranked player, online or offline.
+- A player's `/pvpprofile` shows `SMP Rank: #N` next to their Elo position.
+- `GET /api/stats` adds `"smp_rank": N` (or `null` if unranked) to each player.
+- `GET /api/ranked` is served (rank settings + all ranked players with online / last-seen).
+  Inactivity: if RankedSMPX has `season.inactivity` enabled (e.g. `after: 2d`, `action: reroll`), the response includes
+  `inactivity: {enabled, after_ms, action}` and each player gets `inactive`, `exempt` and `expires_at` (epoch ms when
+  they lose the rank, 0 if online/exempt). Otherwise `ranked.inactive-after-hours` is used for the display only.
+- PlaceholderAPI: `%relique_smp_rank%`, `%relique_smp_ranked_count%`.
+
+Change the values, then run `/reliqueapi reload` — no restart needed.
+
 ### `GET /api/stats`
 Every player the plugin has ever seen (online or not), with everything a
 leaderboard needs: **Elo, kills, deaths, K/D, playtime, blocks mined**.

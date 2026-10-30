@@ -101,7 +101,7 @@ public final class ProfileDialog {
                         .append(t(" (Peak: " + num(Math.round(Math.max(s.peakElo, s.elo))) + ")", ORANGE)),
                 Component.textOfChildren(t("Record: ", GRAY), t(wins + "W", GREEN), t(" / ", GRAY),
                         t(losses + "L", RED), t(" (" + winRate + " WR)", GRAY)),
-                kvLine("Position", position > 0 ? "#" + position : NA, GOLD),
+                positionLine(position, target),
                 streakLine(s))));
         body.add(rule());
 
@@ -176,6 +176,15 @@ public final class ProfileDialog {
 
     private DialogBody line(Component c) {
         return DialogBody.plainMessage(c, bodyWidth);
+    }
+
+    /** "Position: #N" plus "SMP Rank: #N" when RankedSMPX support is on and the player holds a rank. */
+    private Component positionLine(int position, UUID target) {
+        Component pos = kvLine("Position", position > 0 ? "#" + position : NA, GOLD);
+        RankedLookup ranked = plugin.getRankedLookup();
+        int smp = ranked == null ? -1 : ranked.rankOf(target);
+        if (smp < 1) return pos;
+        return Component.textOfChildren(pos, sep(), kvLine("SMP Rank", "#" + smp, ORANGE));
     }
 
     private static Component kvLine(String label, String value, TextColor valueColor) {

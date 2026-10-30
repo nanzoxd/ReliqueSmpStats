@@ -18,6 +18,8 @@ import java.util.Locale;
  *               %relique_tier_platform% %relique_tier_best% %relique_tier_mode% %relique_tier_rank%
  * Leaderboard:  %relique_top_1_name% %relique_top_1_elo% %relique_top_1_kills% %relique_top_1_kd%
  *               %relique_total_players%
+ * RankedSMPX:   %relique_smp_rank% (rank number, N/A if unranked or ranked.enabled is false)
+ *               %relique_smp_ranked_count%
  * Anything unknown prints N/A (never an invented value).
  */
 public final class StatsPlaceholders extends PlaceholderExpansion {
@@ -26,10 +28,12 @@ public final class StatsPlaceholders extends PlaceholderExpansion {
 
     private final StatsManager stats;
     private final String version;
+    private final RankedLookup ranked; // null = RankedSMPX support off
 
-    public StatsPlaceholders(StatsManager stats, String version) {
+    public StatsPlaceholders(StatsManager stats, String version, RankedLookup ranked) {
         this.stats = stats;
         this.version = version;
+        this.ranked = ranked;
     }
 
     @Override public String getIdentifier() { return "relique"; }
@@ -43,6 +47,14 @@ public final class StatsPlaceholders extends PlaceholderExpansion {
         String p = params.toLowerCase(Locale.ROOT);
 
         if (p.equals("total_players")) return String.valueOf(stats.leaderboard().size());
+
+        // RankedSMPX (only when ranked.enabled is true; works even for players with no Elo stats yet)
+        if (p.equals("smp_ranked_count")) return ranked == null ? NA : String.valueOf(ranked.all().size());
+        if (p.equals("smp_rank")) {
+            if (ranked == null || player == null) return NA;
+            int r = ranked.rankOf(player.getUniqueId());
+            return r > 0 ? String.valueOf(r) : NA;
+        }
 
         if (p.startsWith("top_")) {
             // top_<n>_<field>

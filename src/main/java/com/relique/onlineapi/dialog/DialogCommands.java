@@ -15,6 +15,7 @@ import java.util.Locale;
 /**
  * /leaderboard (alias /lb, /elotop)       - open the Elo leaderboard dialog
  * /pvpprofile [player] (alias /pvpstats)  - open a player's stats dialog (default: yourself)
+ * /rankedplayers (alias /rankedlist)      - every RankedSMPX ranked player (ranked.enabled in config.yml)
  * /besttier <player> <platform> <tier> <gamemode> [rank] | /besttier <player> clear
  *      - set the "Best PvP Tier" shown on a profile (use _ for spaces, e.g. Sword_Fight)
  */
@@ -23,11 +24,14 @@ public final class DialogCommands implements CommandExecutor, TabCompleter {
     private final StatsManager stats;
     private final LeaderboardDialog leaderboard;
     private final ProfileDialog profile;
+    private final RankedPlayersDialog rankedPlayers; // null when ranked.enabled / show-all-players is off
 
-    public DialogCommands(StatsManager stats, LeaderboardDialog leaderboard, ProfileDialog profile) {
+    public DialogCommands(StatsManager stats, LeaderboardDialog leaderboard, ProfileDialog profile,
+                          RankedPlayersDialog rankedPlayers) {
         this.stats = stats;
         this.leaderboard = leaderboard;
         this.profile = profile;
+        this.rankedPlayers = rankedPlayers;
     }
 
     @Override
@@ -53,6 +57,15 @@ public final class DialogCommands implements CommandExecutor, TabCompleter {
                     return true;
                 }
                 profile.open(p, target.uuid, LeaderboardDialog.State.first());
+                return true;
+            }
+            case "rankedplayers": {
+                if (!(sender instanceof Player p)) { sender.sendMessage("Players only."); return true; }
+                if (rankedPlayers == null) {
+                    sender.sendMessage("§cThe ranked players list is turned off (ranked.enabled / ranked.show-all-players in config.yml).");
+                    return true;
+                }
+                rankedPlayers.open(p, 0);
                 return true;
             }
             case "besttier":
